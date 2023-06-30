@@ -1,4 +1,5 @@
 """This class provides functionality for updating MariaDB database tables."""
+
 # Standard library imports.
 
 # Third party imports.
@@ -7,12 +8,13 @@ import mariadb
 # Local application/library specific imports.
 import database_manager_config as dbconfig
 
+
 class DatabaseManager:
     """Database manager base class."""
-    
+
     def __init__(self) -> None:
         """Initializes a database manager object."""
-        
+
         # Login variables
         self.database_host = dbconfig.mariadb_login["host"]
         self.database_name = dbconfig.mariadb_login["database"]
@@ -22,18 +24,18 @@ class DatabaseManager:
         # Connection / Cursor variables
         self._connection = None
         self._cursor = None
-        
+
         # Attempt to connect to database
         try:
             self._connection = mariadb.connect(
-                host = self.database_host,
-                user = self.username,
-                password = self.password,
-                database = self.database_name
+                host=self.database_host,
+                user=self.username,
+                password=self.password,
+                database=self.database_name
             )
-            
+
             # Create database cursor
-            self._cursor = self._connection.cursor(dicionary = True)
-        except:
-            print("\nError connecting to database.\n")
+            self._cursor = self._connection.cursor(dictionary = True)
+        except Exception as error:
+            print(f"\nError connecting to database:\n{error}\n")
         return
