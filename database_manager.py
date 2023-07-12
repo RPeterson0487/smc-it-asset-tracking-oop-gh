@@ -6,6 +6,7 @@
 import mariadb
 
 # Local application/library specific imports.
+import asset as asset
 import database_manager_config as dbconfig
 
 
@@ -14,23 +15,18 @@ class DatabaseManager:
 
     def __init__(self):
         """Initializes a database manager object."""
-
+        
         # Login variables
         self._database_host = dbconfig.mariadb_login["host"]
         self._database_name = dbconfig.mariadb_login["database"]
         self._username = dbconfig.mariadb_login["username"]
         self._password = dbconfig.mariadb_login["password"]
 
-        # Connection / Cursor variables.      #//////////////////////////////////////////
+        # Connection / Cursor variables.
         self._connection = None
         self._cursor = None
         
         # Connection / Cursor method.
-        self._connect_database()
-
-    
-    def _connect_database(self):
-        """Attempt to connect to database and create a cursor."""
         try:
             self._connection = mariadb.connect(
                 host=self._database_host,
@@ -42,6 +38,16 @@ class DatabaseManager:
             self._cursor = self._connection.cursor(dictionary = True)
         except Exception as error:
             print(f"\nError connecting to database:\n{error}\n")
+    
+    
+    def close_connection(self):
+        """Commits changes and closes the connection."""
+        try:
+            self._connection.commit()
+            self._connection.close()
+            print("Connection Closed.")
+        except Exception as error:
+            print(f"\nError closing database:\n{error}\n")
     
     
     def search_tables(self, search_term):
@@ -73,28 +79,43 @@ class DatabaseManager:
                     """)
                     return_row = self._cursor.fetchone()
                     while return_row is not None:
-                        return_row["table"] = table
-                        return_row["column"] = column
-                        if not self._check_for_duplicates(return_row, search_results):
-                            search_results.append(return_row)
-                        return_row = self._cursor.fetchone()
+                        if table == "IT_Assets":
+                            item = asset.AssetNew()
+                        else:
+                            item = asset.AssetOld()
+                        for key, value in return_row.items():
+                                setattr(item, key, value)
+                        if item not in return_row:
+                            item.table = table
+                            item.column = column
+                            search_results.append(item)
             return search_results
+                            
+                            
+                        
+                        
+            #             return_row["table"] = table
+            #             return_row["column"] = column
+            #             if not self._check_for_duplicates(return_row, search_results):
+            #                 search_results.append(return_row)
+            #             return_row = self._cursor.fetchone()
+            # return search_results
     
     
-    def _check_for_duplicates(self, entry, results):
-        """Compares entry to the list of results to check for duplicate match."""
+    # def _check_for_duplicates(self, entry, results):
+    #     """Compares entry to the list of results to check for duplicate match."""
         
-        ignore_keys = ("column",)
+    #     ignore_keys = ("column",)
         
-        if not results:
-            return False
-        else:
-            for dictionary in results:
-                duplicate = True
-                for key in dictionary:
-                    if key not in ignore_keys and entry.get(key) != dictionary.get(key):
-                        duplicate = False
-                        break
-                    if duplicate:
-                        return True
-                return False
+    #     if not results:
+    #         return False
+    #     else:
+    #         for dictionary in results:
+    #             duplicate = True
+    #             for key in dictionary:
+    #                 if key not in ignore_keys and entry.get(key) != dictionary.get(key):
+    #                     duplicate = False
+    #                     break
+    #                 if duplicate:
+    #                     return True
+    #             return False

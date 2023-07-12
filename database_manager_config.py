@@ -5,7 +5,7 @@ mariadb_login = {
     "host": "REDACTED",
     "database": "REDACTED",
     "username": "REDACTED",
-    "password": "REDACTED"
+    "password": "REDACTED",
 }
 
 search_tables = (
@@ -18,12 +18,7 @@ search_tables = (
     "IT_Assets_SW",
     "IT_Assets_TB",
     "IT_Assets_TC",
-    "IT_Assets"
+    "IT_Assets",
 )
 
 insert_tables = ("IT_Assets",)
-
-test_serials = (
-    "aa002",
-    "bb002",
-)

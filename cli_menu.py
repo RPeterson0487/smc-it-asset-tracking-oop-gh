@@ -1,6 +1,6 @@
 """This module provides various menus and menu operations."""
 
-# TODO Freeze all but regular assets table and walk through code with bb002 to figure out why results are empty
+# TODO Remove notes print from SW and TC
 
 # Standard library imports.
 import os
@@ -11,7 +11,7 @@ import os
 import database_manager as database
 
 
-class MainMenu:
+class MenuScreens:
     """Initializes Main Menu and runs program."""
 
     def __init__(self):
@@ -25,36 +25,81 @@ class MainMenu:
         }
         
         # Program starting method.
-        self._main_menu()
+        self.main_menu()
 
 
-    def _main_menu(self):
+    def main_menu(self):
         """Display the main menu and wait for user input."""
         
         Utility.clear_screen()
         while True:
             
-            print(f"""
-==[ MAIN MENU ]{'=' * (os.get_terminal_size().columns - 15)}
-
-1)  Search for asset
-2)  Edit existing asset
-0)  Quit program
-        """)
+            print(f"==[ MAIN MENU ]{'=' * (os.get_terminal_size().columns - 15)}\n")
+            print("1)  Search for asset")
+            print("2)  Edit existing asset")
+            print("0)  Quit program\n")
             
-            main_menu_select = MenuFunction("n/a", "Select menu option: ", tuple(self._menu_options.keys()), "n/a") #//////////////////////////////////////////
+            main_menu_select = MenuFunction(self, "n/a", "Enter menu option: ", tuple(self._menu_options.keys()), ("n/a",))
             menu_action = self._menu_options.get(main_menu_select.menu_input)
             menu_action()
     
 
     def asset_search(self):
         Utility.clear_screen()
-        asset_search_term = MenuFunction("n/a", "Enter search term: ", ("n/a",), ("all",))
-        asset_search_results = maria.search_tables(asset_search_term.menu_input)
-        
-        for result in asset_search_results:         #//////////////////////////////////////////
-            Utility.output_limited(result)
-            print()
+        while True:
+            migrated_count = 0
+            duplicate_count = 0
+            result_list = []
+            
+            print(f"==[ BASIC SEARCH ]{'=' * (os.get_terminal_size().columns - 18)}")
+            asset_search_term = MenuFunction(self, self.main_menu, "Search for asset: ", ("n/a",), ("all",))
+            if asset_search_term.menu_input is None:
+                continue
+            else:
+                asset_search_results = maria.search_tables(asset_search_term.menu_input)
+            
+            for result in asset_search_results:
+                if result.table != "IT_Assets" and result.is_migrated == 1:
+                    migrated_count += 1
+                elif result.table != "IT_Assets" and result.is_duplicate == 1:
+                    duplicate_count += 1
+                else:
+                    result_list.append(result)
+                    
+            for entry in result_list:
+                print()
+                entry.output()
+                
+                
+            
+            # print(f"==[ BASIC SEARCH ]{'=' * (os.get_terminal_size().columns - 18)}")
+            # asset_search_term = MenuFunction(self, self.main_menu, "Search for asset: ", ("n/a",), ("all",))
+            # if asset_search_term.menu_input is None:
+            #     continue
+            # else:
+            #     asset_search_results = maria.search_tables(asset_search_term.menu_input)
+            
+            # for result in asset_search_results:
+            #     if result["table"] != "IT_Assets" and result["is_migrated"] == 1:
+            #         migrated_count += 1
+                # elif result["table"] != "IT_Assets" and result["is_duplicate"] == 1:
+                #     duplicate_count += 1
+            #     else:
+            #         result_list.append(result)
+                
+            # for entry in result_list:
+            #     print()
+            #     Utility.output_limited(entry)
+            #     print("-" * os.get_terminal_size().columns)
+            # if migrated_count or duplicate_count:
+            #     print(f"Showing {len(result_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
+            # else:
+            #     print(f"Found {len(result_list)} result{'' if (asset_search_results) == 1 else 's'}.")
+            # if migrated_count:
+            #     print(f"{migrated_count} entr{'y' if duplicate_count == 1 else 'ies'} marked migrated hidden.")
+            # if duplicate_count:
+            #     print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
+            # print()
 
 
     def asset_edit(self):
@@ -62,17 +107,21 @@ class MainMenu:
     
     
     def quit_program(self):
-        print("Function quit_program")              #//////////////////////////////////////////
+        Utility.clear_screen()
+        maria.close_connection()
+        print("\nGoodbye!\n")
+        exit()
 
 
 class MenuFunction:
     """Provides menu and input functionality."""
     
-    def __init__(self, back_to: str = "n/a", prompt: str = "Enter option: ", menu_options: tuple = ("n/a",), command_options: tuple = ("all",)):
+    def __init__(self, calling_class, back_to: str = "n/a", prompt: str = "Enter option: ", menu_options: tuple = ("n/a",), command_options: tuple = ("all",)):
         """Instatiates menu input class."""
         
-        # Class variable(s) used to indicate where "back" should go.
-        self._back_to = back_to.lower()
+        # Class variable(s) used to indicate where "cancel" and "back" should go.
+        self._calling_class = calling_class
+        self._back_to = back_to
         
         # Class variable(s) used to display the input prompt.
         self._prompt = prompt
@@ -110,36 +159,38 @@ class MenuFunction:
                 self._command_list.append("clear")
             if "back" in self._command_options:
                 self._command_list.append("back")
-            if "cancel" in self._command_options:
+            if "main" in self._command_options:
                 self._command_list.append("cancel")
             if "quit" in self._command_options:
                 self._command_list.append("quit")
         
         for command in self._command_list:
             print(f"{command}{self._command_print_dict[command]}", end = "    ")
-        print()
+        print("\n")
     
     
     def _get_user_input(self):
         while True:
-            user_input = input(self._prompt)
+            user_input = input(self._prompt).strip()
             
             if user_input.lower() in self._command_list:
                 if user_input.lower() == "clear":
-                    print("input clear")                    #///////////////////////////
+                    Utility.clear_screen()
+                    break
                 elif user_input.lower() == "back":
-                    print("input back")                     #///////////////////////////
+                    self._back_to()
                 elif user_input.lower() == "cancel":
-                    print("input cancel")                   #///////////////////////////
+                    self._calling_class.main_menu()
                 elif user_input.lower() == "quit":
-                    print("input quit")                     #///////////////////////////
+                    self._calling_class.quit_program()
             elif not user_input or (user_input not in self._menu_options and "n/a" not in self._menu_options):
-                print("Not a valid entry, please try again.")
+                # Clear the screen, show "invalid input," and redisplay menu, commands, and input.     #!!!!!!!!!!!!!!!!!!!!
+                print("Invalid input, please try again.\n")
             else:
                 self.menu_input = user_input
                 break
-
-
+    
+    
 class Utility:
     """Provides functions for use by menus."""
     
@@ -171,7 +222,8 @@ class Utility:
             print(f"Fork Truck: {Utility._check_result_value(asset_dictionary.get('fork_truck_number', 'key missing'))}")
         elif not current and asset_dictionary["table"] == "IT_Assets_FT":
             print(f"Fork Truck: {Utility._check_result_value(asset_dictionary.get('Fork_Truck_No', 'key missing'))}")
-        print(f"IP Address: {Utility._check_result_value(asset_dictionary.get(('ip_address' if current else 'Ip_Address'), 'key missing'))}")
+        if asset_dictionary["table"] != "IT_Assets_SG":
+            print(f"IP Address: {Utility._check_result_value(asset_dictionary.get(('ip_address' if current else 'Ip_Address'), 'key missing'))}")
         print(f"Notes: {Utility._check_result_value(asset_dictionary.get(('notes' if current else 'Current_User'), 'key missing'))}")
         print(f"Found in table {asset_dictionary['table']} under {asset_dictionary['column']} as {asset_dictionary.get(asset_dictionary['column'], 'Error')}.")
         if not current:
@@ -180,13 +232,13 @@ class Utility:
     
     def _check_result_value(value):
         if value == "key missing":
-            return "!!!!!key missing!!!!!"
+            return "!!!!!key missing!!!!!"                              # ////////////////
         elif value == "" or value is None:
-            return "!!!!!BLANKETY BLANK!!!!!"
+            return "!!!!!BLANKETY BLANK!!!!!"                           # ////////////////
         else:
             return str(value)
 
 
 if __name__ == "__main__":
     maria = database.DatabaseManager()
-    start = MainMenu()
+    start = MenuScreens()
