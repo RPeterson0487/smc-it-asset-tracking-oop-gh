@@ -1,11 +1,17 @@
 """Configuration file for database manager class.
 This is set up for the SMC IT Asset Tracking project."""
 
+# Import object class to be used as a template for objects created by the
+# database manager and assign the class to the template attribute below.
+import asset
+
+template = asset.Asset
+
 mariadb_login = {
     "host": "REDACTED",
     "database": "REDACTED",
     "username": "REDACTED",
-    "password": "REDACTED",
+    "password": "REDACTED"
 }
 
 search_tables = (

@@ -6,7 +6,6 @@
 import mariadb
 
 # Local application/library specific imports.
-import asset as asset
 import database_manager_config as dbconfig
 
 
@@ -78,44 +77,15 @@ class DatabaseManager:
                         LIKE '%{search_term}%'
                     """)
                     return_row = self._cursor.fetchone()
+                    
                     while return_row is not None:
-                        if table == "IT_Assets":
-                            item = asset.AssetNew()
-                        else:
-                            item = asset.AssetOld()
+                        item = dbconfig.template()
                         for key, value in return_row.items():
-                                setattr(item, key, value)
-                        if item not in return_row:
+                            setattr(item, key, value)
+                        if item not in search_results:
                             item.table = table
                             item.column = column
                             search_results.append(item)
+                        return_row = self._cursor.fetchone()
+                            
             return search_results
-                            
-                            
-                        
-                        
-            #             return_row["table"] = table
-            #             return_row["column"] = column
-            #             if not self._check_for_duplicates(return_row, search_results):
-            #                 search_results.append(return_row)
-            #             return_row = self._cursor.fetchone()
-            # return search_results
-    
-    
-    # def _check_for_duplicates(self, entry, results):
-    #     """Compares entry to the list of results to check for duplicate match."""
-        
-    #     ignore_keys = ("column",)
-        
-    #     if not results:
-    #         return False
-    #     else:
-    #         for dictionary in results:
-    #             duplicate = True
-    #             for key in dictionary:
-    #                 if key not in ignore_keys and entry.get(key) != dictionary.get(key):
-    #                     duplicate = False
-    #                     break
-    #                 if duplicate:
-    #                     return True
-    #             return False

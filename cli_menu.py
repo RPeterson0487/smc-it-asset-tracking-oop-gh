@@ -13,6 +13,8 @@ import database_manager as database
 
 class MenuScreens:
     """Initializes Main Menu and runs program."""
+    
+    SEPARATOR = ("-" * os.get_terminal_size().columns)
 
     def __init__(self):
         """Displays the main menu and asks for input."""
@@ -69,37 +71,18 @@ class MenuScreens:
             for entry in result_list:
                 print()
                 entry.output()
-                
-                
+                print(self.SEPARATOR)
             
-            # print(f"==[ BASIC SEARCH ]{'=' * (os.get_terminal_size().columns - 18)}")
-            # asset_search_term = MenuFunction(self, self.main_menu, "Search for asset: ", ("n/a",), ("all",))
-            # if asset_search_term.menu_input is None:
-            #     continue
-            # else:
-            #     asset_search_results = maria.search_tables(asset_search_term.menu_input)
-            
-            # for result in asset_search_results:
-            #     if result["table"] != "IT_Assets" and result["is_migrated"] == 1:
-            #         migrated_count += 1
-                # elif result["table"] != "IT_Assets" and result["is_duplicate"] == 1:
-                #     duplicate_count += 1
-            #     else:
-            #         result_list.append(result)
-                
-            # for entry in result_list:
-            #     print()
-            #     Utility.output_limited(entry)
-            #     print("-" * os.get_terminal_size().columns)
-            # if migrated_count or duplicate_count:
-            #     print(f"Showing {len(result_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
-            # else:
-            #     print(f"Found {len(result_list)} result{'' if (asset_search_results) == 1 else 's'}.")
-            # if migrated_count:
-            #     print(f"{migrated_count} entr{'y' if duplicate_count == 1 else 'ies'} marked migrated hidden.")
-            # if duplicate_count:
-            #     print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
-            # print()
+            if migrated_count or duplicate_count:
+                print(f"Showing {len(result_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
+            else:
+                print(f"Found {len(result_list)} result{'' if (asset_search_results) == 1 else 's'}.")
+            if migrated_count:
+                print(f"{migrated_count} entr{'y' if duplicate_count == 1 else 'ies'} marked migrated hidden.")
+            if duplicate_count:
+                print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
+            print()
+
 
 
     def asset_edit(self):
@@ -199,44 +182,6 @@ class Utility:
             os.system("clear")
         else:
             os.system("cls")
-    
-    
-    def output_full(asset_dictionary: dict):
-        for key in asset_dictionary:
-            if key not in ("table", "column", "is_verified",):
-                print(f"{key}: {asset_dictionary[key]}")
-    
-    
-    def output_limited(asset_dictionary: dict):
-        if asset_dictionary["table"] == "IT_Assets":
-            current = True
-        else:
-            current = False
-        
-        print(f"Serial Number: {Utility._check_result_value(asset_dictionary.get(('serial' if current else 'Serial'), 'key missing'))}")
-        if current:
-            print(f"Device Type: {Utility._check_result_value(asset_dictionary.get('device_type', 'key missing'))}")
-        print(f"Model: {Utility._check_result_value(asset_dictionary.get(('model' if current else 'Model'), 'key missing'))}")
-        print(f"Asset Number: {Utility._check_result_value(asset_dictionary.get(('asset_number' if current else 'Asset'), 'key missing'))}")
-        if current and asset_dictionary["device_type"] == "Fork Truck":
-            print(f"Fork Truck: {Utility._check_result_value(asset_dictionary.get('fork_truck_number', 'key missing'))}")
-        elif not current and asset_dictionary["table"] == "IT_Assets_FT":
-            print(f"Fork Truck: {Utility._check_result_value(asset_dictionary.get('Fork_Truck_No', 'key missing'))}")
-        if asset_dictionary["table"] != "IT_Assets_SG":
-            print(f"IP Address: {Utility._check_result_value(asset_dictionary.get(('ip_address' if current else 'Ip_Address'), 'key missing'))}")
-        print(f"Notes: {Utility._check_result_value(asset_dictionary.get(('notes' if current else 'Current_User'), 'key missing'))}")
-        print(f"Found in table {asset_dictionary['table']} under {asset_dictionary['column']} as {asset_dictionary.get(asset_dictionary['column'], 'Error')}.")
-        if not current:
-            print("Migration Status: This device has not yet been migrated to the new tracking table.")
-    
-    
-    def _check_result_value(value):
-        if value == "key missing":
-            return "!!!!!key missing!!!!!"                              # ////////////////
-        elif value == "" or value is None:
-            return "!!!!!BLANKETY BLANK!!!!!"                           # ////////////////
-        else:
-            return str(value)
 
 
 if __name__ == "__main__":
