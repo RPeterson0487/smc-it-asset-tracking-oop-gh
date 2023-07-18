@@ -49,7 +49,7 @@ class DatabaseManager:
             print(f"\nError closing database:\n{error}\n")
     
     
-    def search_tables(self, search_term):
+    def search_tables(self, search_term:str, search_fields: list = []):
         """Search through the database tables listed in config."""
         
         search_results = []
@@ -70,12 +70,13 @@ class DatabaseManager:
                     column_row = self._cursor.fetchone()
                     
                 for column in column_list:
-                    self._cursor.execute(f"""
-                        SELECT *
-                        FROM {table}
-                        WHERE {column}
-                        LIKE '%{search_term}%'
-                    """)
+                    if not search_fields or column in search_fields:
+                        self._cursor.execute(f"""
+                            SELECT *
+                            FROM {table}
+                            WHERE {column}
+                            LIKE '%{search_term}%'
+                        """)
                     return_row = self._cursor.fetchone()
                     
                     while return_row is not None:

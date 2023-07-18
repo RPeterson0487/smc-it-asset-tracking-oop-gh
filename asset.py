@@ -13,12 +13,12 @@ class Asset:
     """This class combines the old and new assets."""
     
     def output(self, limited: bool = True):
+        if self.table == "IT_Assets":
+            current = True
+        else:
+            current = False
+        
         if limited:
-            if self.table == "IT_Assets":
-                current = True
-            else:
-                current = False
-            
             if current:
                 output_dictionary = {
                     "Serial Number": self.serial,
@@ -56,10 +56,12 @@ class Asset:
                     print(f"{field}: {output_dictionary[field] if output_dictionary[field] is not None and output_dictionary[field] != '' else ''}")
                         
             print(f"\nFound in table {self.table} under {self.column} as {getattr(self, self.column)}")
+            
         else:
             output_dictionary = vars(self)
             for key, value in output_dictionary.items():
-                print(f"{key}, {value}")
+                if key not in ("is_duplicate", "is_migrated","is_verified", "table", "column"):
+                    print(f"{key}: {value}")
         if not current:
             print("Migration Status: This device has not yet been migrated to the new tracking table.")
     
