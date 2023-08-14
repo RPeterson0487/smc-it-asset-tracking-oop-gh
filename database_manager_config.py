@@ -27,4 +27,6 @@ search_tables = (
     "IT_Assets",
 )
 
-insert_tables = ("IT_Assets",)
+insert_table = "IT_Assets"
+
+control_tables = ("IT_Assets_Control",)

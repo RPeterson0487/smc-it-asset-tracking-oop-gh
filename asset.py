@@ -12,7 +12,7 @@ import dataclasses
 class Asset:
     """This class combines the old and new assets."""
     
-    def output(self, limited: bool = True):
+    def output(self, limited: bool = True, print_fields: list = None):
         if self.table == "IT_Assets":
             current = True
         else:
@@ -25,7 +25,7 @@ class Asset:
                     "Device Type": self.device_type,
                     "Model": self.model,
                     "Asset Number": self.asset_number,
-                    "Fork Truck": self.fork_truck_number,
+                    "Fork Truck": self.fork_truck_reference,
                     "IP Address": self.ip_address,
                     "Notes": self.notes,
                 }
@@ -60,7 +60,7 @@ class Asset:
         else:
             output_dictionary = vars(self)
             for key, value in output_dictionary.items():
-                if key not in ("is_duplicate", "is_migrated","is_verified", "table", "column"):
+                if (not print_fields or key in print_fields) and key not in ("is_duplicate", "is_migrated", "is_verified", "table", "column"):
                     print(f"{key}: {value}")
         if not current:
             print("Migration Status: This device has not yet been migrated to the new tracking table.")
