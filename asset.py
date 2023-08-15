@@ -67,6 +67,17 @@ class Asset:
     
     
     def __eq__(self, other):
+        ignore_keys = ("column", "table")
         if isinstance(other, Asset):
-            return vars(self) == vars(other)
+            self_vars = {}
+            for self_key, self_value in vars(self).items():
+                if self_key not in ignore_keys:
+                    self_vars[self_key] = self_value
+            
+            other_vars = {}
+            for other_key, other_value in vars(other).items():
+                if other_key not in ignore_keys:
+                    other_vars[other_key] = other_value
+            
+            return self_vars == other_vars        
         return False

@@ -38,6 +38,8 @@ class MenuScreens:
         Utility.clear_screen()
         while True:
             
+            print("TEST MODE\nAll information is being saved to TEST DB\n\n")
+            
             print(f"==[ MAIN MENU ]{'=' * (os.get_terminal_size().columns - 15)}\n")
             print("1)  Search for asset")
             print("2)  Edit existing asset")
@@ -63,8 +65,9 @@ class MenuScreens:
         if type_search == "basic":
             Utility.clear_screen()
         while True:
-            migrated_count = 0
             duplicate_count = 0
+            migrated_count = 0
+            retired_count = 0
             result_list = []
             
             # Set up menu and intial search prompt.
@@ -80,26 +83,41 @@ class MenuScreens:
             if search_term or search_term == "":
                 asset_search_term = search_term
             else:
+                print("Search Prefix (No space): A- Asset Number, R- Asset Reference, S- Serial Number.")
                 asset_search_term = MenuFunction(self, self.main_menu, search_prompt).menu_input
             if asset_search_term is None:
                 if type_search == "edit":
                     self.asset_edit()
                 else:
                     continue
+                
+            if asset_search_term[0:2].lower() == "a-":
+                search_fields.extend(["Asset", "asset_number"])
+                use_like = False
+                asset_search_term = asset_search_term[2:]
+            elif asset_search_term[0:2].lower() == "r-":
+                search_fields.extend(["asset_reference"])
+                asset_search_term = asset_search_term[2:]
+            elif asset_search_term[0:2].lower() == "s-":
+                search_fields.extend(["serial", "Serial"])
+                use_like = False
+                asset_search_term = asset_search_term[2:]
+            
+            if search_fields and use_like:
+                asset_search_results = maria.search_tables(asset_search_term, search_fields)
+            elif search_fields and not use_like:
+                asset_search_results = maria.search_tables(asset_search_term, search_fields, False)
+            elif not search_fields and not use_like:
+                asset_search_results = maria.search_tables(asset_search_term, None, False)
             else:
-                if search_fields and use_like:
-                    asset_search_results = maria.search_tables(asset_search_term, search_fields)
-                elif search_fields and not use_like:
-                    asset_search_results = maria.search_tables(asset_search_term, search_fields, False)
-                elif not search_fields and not use_like:
-                    asset_search_results = maria.search_tables(asset_search_term, None, False)
-                else:
-                    asset_search_results = maria.search_tables(asset_search_term)
+                asset_search_results = maria.search_tables(asset_search_term)
             
             # Set up output of search results.
             if asset_search_results != "Empty Search":
                 for result in asset_search_results:
-                    if result.table != "IT_Assets" and result.is_migrated == 1:
+                    if result.table == "IT_Assets" and result.status == "Retired":
+                        retired_count += 1
+                    elif result.table != "IT_Assets" and result.is_migrated == 1:
                         migrated_count += 1
                     elif result.table != "IT_Assets" and result.is_duplicate == 1:
                         duplicate_count += 1
@@ -122,8 +140,8 @@ class MenuScreens:
                         print(self.SEPARATOR)
             
             # Print results summary and / or return results if applicable.
-            if output != "none" and asset_search_results:
-                if migrated_count or duplicate_count:
+            if output != "none":
+                if migrated_count or duplicate_count or retired_count:
                     print(f"Showing {len(result_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
                 else:
                     print(f"Found {len(result_list)} result{'' if (asset_search_results) == 1 else 's'}.")
@@ -132,7 +150,11 @@ class MenuScreens:
                         print(f"{migrated_count} entr{'y' if duplicate_count == 1 else 'ies'} marked migrated hidden.")
                     if duplicate_count:
                         print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
-                    print()
+                    if retired_count:
+                        print(f"{retired_count} entr{'y' if duplicate_count == 1 else 'ies'} marked retired hidden.")
+                print()
+            use_like = True
+            search_fields = []
             if type_search == "edit":
                 return result_list
 
@@ -266,6 +288,7 @@ class MenuScreens:
             #   keep active.
             Utility.clear_screen()
             while True:
+                select_duplicate = None
                 print(f"==[ Mark Duplicates ]{'=' * (os.get_terminal_size().columns - 21)}")
                 if len(output_list) == 1:
                     select_duplicate = "1"
@@ -420,11 +443,12 @@ class MenuScreens:
                     unconvertable_datatype[key] = value
                     new_setup[key] = None
         
-        Utility.clear_screen()
-        print("The following information will be lost, please take note:\n")
-        for field, entry in unconvertable_datatype.items():
-            print(f"{field.capitalize()}: {entry}")
-        input("\nPress enter to continue.")
+        if unconvertable_datatype:
+            Utility.clear_screen()
+            print("The following information will be lost, please take note:\n")
+            for field, entry in unconvertable_datatype.items():
+                print(f"{field.capitalize()}: {entry}")
+            input("\nPress enter to continue.")
         
         asset_id = self._edit_screen(maria.new_object(new_setup), False)
         if asset_id:
@@ -900,7 +924,6 @@ class MenuFunction:
                 elif user_input.lower() == "quit":
                     self._calling_class.quit_program()
             elif not user_input or (user_input not in self._menu_options and "n/a" not in self._menu_options):
-                # Clear the screen, show "invalid input," and redisplay menu, commands, and input.     #!!!!!!!!!!!!!!!!!!!!
                 print("Invalid input, please try again.\n")
             else:
                 self.menu_input = user_input
