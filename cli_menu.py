@@ -61,10 +61,12 @@ class MenuScreens:
         use_like: bool = True
     ):
         option_number = 0
+        prefix_list = ["A- Asset Number.", "R- Asset Reference.", "S- Serial."]
         
         if type_search == "basic":
             Utility.clear_screen()
         while True:
+            current_line = ""
             duplicate_count = 0
             migrated_count = 0
             retired_count = 0
@@ -83,7 +85,15 @@ class MenuScreens:
             if search_term or search_term == "":
                 asset_search_term = search_term
             else:
-                print("Search Prefix (No space): A- Asset Number, R- Asset Reference, S- Serial Number.")
+                print("Search Prefix (No space):")
+                for prefix in prefix_list:
+                    prefix_string = f"{prefix}  "
+                    if len(current_line) + len(prefix_string) <= os.get_terminal_size().columns:
+                        current_line += prefix_string
+                    else:
+                        print(current_line)
+                        current_line = prefix_string
+                print(current_line)
                 asset_search_term = MenuFunction(self, self.main_menu, search_prompt).menu_input
             if asset_search_term is None:
                 if type_search == "edit":
@@ -203,7 +213,6 @@ class MenuScreens:
                 continue
             else:
                 initial_type = self._edit_locked_list("device_type")
-                # MenuFunction(self, self.asset_new, "Enter device type: ", ["n/a"], ["back", "cancel", "quit"]).menu_input
                 if initial_type is None:
                     continue
                 device_fields = self._set_device_fields(initial_type)
@@ -553,7 +562,7 @@ class MenuScreens:
                     if value is not None and value != "":
                         print(f"{option_number})  {key.capitalize()}: {value} {postfix}")
                     else:
-                        print(f"{option_number})  {key.capitalize()}: {'_' * 10} {postfix}")
+                        print(f"{option_number})  {key.capitalize()}: {'_' * 5} {postfix}")
                     fields.append(key)
             print(f"{self.SEPARATOR}")
             
@@ -605,7 +614,7 @@ class MenuScreens:
             new_date = MenuFunction(self, self._edit_screen, "Enter new date (MM/DD/YYYY): ", ["n/a"], ["n/a"], editing_asset).menu_input
             if new_date is None:
                 continue
-            elif new_date == "back":
+            elif new_date.lower() == "back":
                 break
             else:
                 valid_date = self._convert_date(new_date)
@@ -648,7 +657,7 @@ class MenuScreens:
                 option_list.append("back")
                 print("back: Go back to previous screen.\n")
                 select_entry = MenuFunction(self, self._edit_screen, "Enter command or select entry to add or edit: ", option_list, ["n/a"], editing_asset).menu_input
-                if select_entry == "back":
+                if select_entry.lower() == "back":
                     go_back = True
                     break
                 self._output_list_entries(editing_asset, attribute, entries_list)
@@ -758,7 +767,7 @@ class MenuScreens:
         while True:
             print("Warning: Current data will be overwritten")
             new_number = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
-            if new_number == "back":
+            if new_number.lower() == "back":
                 break
             try:
                 new_number = float(new_number)
@@ -787,7 +796,7 @@ class MenuScreens:
             new_data = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
             if new_data is None:
                 continue
-            elif new_data == "back":
+            elif new_data.lower() == "back":
                 break
             elif len(new_data) >= 255:
                 print("Entry is too long, please shorten to under 255 characters.")
@@ -872,7 +881,7 @@ class MenuFunction:
             "clear": ": Clear the screen.",
             "back": ": Go back to previous screen.",
             "cancel": ": Go back to main menu.",
-            "quit": ": Disconnect from database and quit the program.",
+            "quit": ": Quit the program.",
         }
         
         # Input methods not needed if search term is defined by the caller.
@@ -886,6 +895,8 @@ class MenuFunction:
 
     def _list_commands(self):
         """List commands that can be used from input."""
+        current_line = ""
+        terminal_width = os.get_terminal_size().columns
         
         if "all" in self._command_options:
             self._command_list.extend(["clear", "back", "cancel", "quit"])
@@ -901,15 +912,22 @@ class MenuFunction:
             if "quit" in self._command_options:
                 self._command_list.append("quit")
         
+        print("Command Options:")
         for command in self._command_list:
-            print(f"{command}{self._command_print_dict[command]}", end = "    ")
-        print("\n")
+            command_string = f"{command}{self._command_print_dict[command]}  "
+            if len(current_line) + len(command_string) <= terminal_width:
+                current_line += command_string
+            else:
+                print(current_line)
+                current_line = command_string
+        print(f"{current_line}\n")
     
     
     def _get_user_input(self):
         while True:
             user_input = input(self._prompt).strip()
             
+            test = user_input.lower()                                     #!!!!!!!!!!!!!!!
             if user_input.lower() in self._command_list:
                 if user_input.lower() == "clear":
                     Utility.clear_screen()
@@ -923,7 +941,7 @@ class MenuFunction:
                     self._calling_class.main_menu()
                 elif user_input.lower() == "quit":
                     self._calling_class.quit_program()
-            elif not user_input or (user_input not in self._menu_options and "n/a" not in self._menu_options):
+            elif not user_input or (user_input.lower() not in self._menu_options and "n/a" not in self._menu_options):
                 print("Invalid input, please try again.\n")
             else:
                 self.menu_input = user_input

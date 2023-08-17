@@ -26,6 +26,7 @@ class Asset:
                     "Model": self.model,
                     "Asset Number": self.asset_number,
                     "Fork Truck": self.fork_truck_reference,
+                    "Device Name": self.device_name,
                     "IP Address": self.ip_address,
                     "Notes": self.notes,
                 }
@@ -47,6 +48,8 @@ class Asset:
                     output_dictionary["Asset Number"] = self.Asset
                 if hasattr(self, "Fork_Truck_No"):
                     output_dictionary["Fork Truck"] = self.Fork_Truck_No
+                if hasattr(self, "Name"):
+                    output_dictionary["Device Name"] = self.Name
                 if hasattr(self, "Ip_Address"):
                     output_dictionary["IP Address"] = self.Ip_Address
                 if hasattr(self, "Current_User"):
