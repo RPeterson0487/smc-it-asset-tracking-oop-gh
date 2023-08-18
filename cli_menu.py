@@ -25,7 +25,7 @@ class MenuScreens:
             "1": self.asset_search,
             "2": self.asset_edit,
             "3": self.asset_new,
-            "0": self.quit_program,
+            "0": self.exit_program,
         }
         
         # Program starting method.
@@ -44,7 +44,7 @@ class MenuScreens:
             print("1)  Search for asset")
             print("2)  Edit existing asset")
             print("3)  Create new asset")
-            print("0)  Quit program")
+            print("0)  Exit program")
             print(self.SEPARATOR)
             
             main_menu_select = MenuFunction(self, "n/a", "Enter menu option: ", list(self._menu_options.keys()), ["n/a"])
@@ -101,14 +101,14 @@ class MenuScreens:
                 else:
                     continue
                 
-            if asset_search_term[0:2].lower() == "a-":
+            if asset_search_term[0:2].upper() == "A-":
                 search_fields.extend(["Asset", "asset_number"])
                 use_like = False
                 asset_search_term = asset_search_term[2:]
-            elif asset_search_term[0:2].lower() == "r-":
+            elif asset_search_term[0:2].upper() == "R-":
                 search_fields.extend(["asset_reference"])
                 asset_search_term = asset_search_term[2:]
-            elif asset_search_term[0:2].lower() == "s-":
+            elif asset_search_term[0:2].upper() == "S-":
                 search_fields.extend(["serial", "Serial"])
                 use_like = False
                 asset_search_term = asset_search_term[2:]
@@ -125,7 +125,7 @@ class MenuScreens:
             # Set up output of search results.
             if asset_search_results != "Empty Search":
                 for result in asset_search_results:
-                    if result.table == "IT_Assets" and result.status == "Retired":
+                    if result.table == "IT_Assets" and (result.status == "Retired" or result.status == "Destroyed"):
                         retired_count += 1
                     elif result.table != "IT_Assets" and result.is_migrated == 1:
                         migrated_count += 1
@@ -155,13 +155,12 @@ class MenuScreens:
                     print(f"Showing {len(result_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
                 else:
                     print(f"Found {len(result_list)} result{'' if (asset_search_results) == 1 else 's'}.")
-                if type_search != "edit":
-                    if migrated_count:
-                        print(f"{migrated_count} entr{'y' if duplicate_count == 1 else 'ies'} marked migrated hidden.")
-                    if duplicate_count:
-                        print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
-                    if retired_count:
-                        print(f"{retired_count} entr{'y' if duplicate_count == 1 else 'ies'} marked retired hidden.")
+                if migrated_count:
+                    print(f"{migrated_count} entr{'y' if migrated_count == 1 else 'ies'} marked migrated hidden.")
+                if duplicate_count:
+                    print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
+                if retired_count:
+                    print(f"{retired_count} entr{'y' if retired_count == 1 else 'ies'} marked retired or destroyed hidden.")
                 print()
             use_like = True
             search_fields = []
@@ -525,7 +524,7 @@ class MenuScreens:
             
             Utility.clear_screen()
             
-            if not hasattr(asset, "serial"):
+            if not hasattr(asset, "serial") or not getattr(asset, "serial", ""):
                 locked_fields.remove("serial")
                 required_fields.append("serial")
             
@@ -569,13 +568,13 @@ class MenuScreens:
             if short:
                 break
             
-            print("save: Save changes to database.")
+            print("S: Save changes to database.")
             print("WARNING: The below commands will discard any changes!")
-            select_field = MenuFunction(self, back_command, "Enter command or select field to edit: ", [str(i) for i in range(1, len(fields) + 1)] + ["save"], ["back", "cancel", "quit"]).menu_input
+            select_field = MenuFunction(self, back_command, "Enter command or select field to edit: ", [str(i) for i in range(1, len(fields) + 1)] + ["S"], ["back", "cancel", "exit"]).menu_input
             
             if select_field is None:
                 continue
-            elif select_field.lower().strip() == "save":
+            elif select_field.upper().strip() == "S":
                 saved_asset = self._edit_save(asset, required_fields)
                 if saved_asset:
                     return saved_asset
@@ -606,7 +605,7 @@ class MenuScreens:
             display_date = self._convert_date(sql_date)
         
         self._edit_screen(editing_asset, True)
-        print("back: Go back to previous screen.\n")
+        print("B: Go back to previous screen.\n")
         print(f"{attribute.capitalize()} current date: {display_date}\n")
         
         while True:
@@ -614,7 +613,7 @@ class MenuScreens:
             new_date = MenuFunction(self, self._edit_screen, "Enter new date (MM/DD/YYYY): ", ["n/a"], ["n/a"], editing_asset).menu_input
             if new_date is None:
                 continue
-            elif new_date.lower() == "back":
+            elif new_date.upper() == "B":
                 break
             else:
                 valid_date = self._convert_date(new_date)
@@ -654,27 +653,27 @@ class MenuScreens:
                 self._output_list_entries(editing_asset, attribute, entries_list)
             while True:
                 option_list = [str(i) for i in range(1, len(entries_list) + 2)]
-                option_list.append("back")
-                print("back: Go back to previous screen.\n")
+                option_list.append("B")
+                print("B: Go back to previous screen.\n")
                 select_entry = MenuFunction(self, self._edit_screen, "Enter command or select entry to add or edit: ", option_list, ["n/a"], editing_asset).menu_input
-                if select_entry.lower() == "back":
+                if select_entry.upper() == "B":
                     go_back = True
                     break
                 self._output_list_entries(editing_asset, attribute, entries_list)
                 
                 if int(select_entry) == (len(entries_list) + 1):
-                    print("back: Go back to previous screen.\n")
+                    print("B: Go back to previous screen.\n")
                     print("New entry\n")
                     prompt = "Enter command or new entry: "
                 else:
-                    print("back: Go back to previous screen.    delete: Delete this entry\n")
+                    print("B: Go back to previous screen.    delete: Delete this entry\n")
                     print(f"Current entry: {entries_list[int(select_entry) - 1]}\n")
                     print("Warning: Current entry will be overwritten")
                     prompt = "Enter command or new entry: "
                 edit_entry = MenuFunction(self, "n/a", prompt, ["n/a"], ["n/a"]).menu_input
-                if edit_entry.lower().strip() == "back":
+                if edit_entry.upper().strip() == "B":
                     break
-                elif edit_entry.lower().strip() == "delete":
+                elif edit_entry.upper().strip() == "D":
                     if len(entries_list) == 0:
                         break
                     else:
@@ -734,12 +733,12 @@ class MenuScreens:
                 option_number += 1
                 print(f"{option_number})  {items}")
             option_list = [str(i) for i in range(1, len(options) + 1)]
-            option_list.append("back")
+            option_list.append("B")
             print(self.SEPARATOR)
-            print("back: Go back to previous screen.\n")
+            print("B: Go back to previous screen.\n")
             
             select_option = MenuFunction(self, "n/a", option_prompt, option_list, ["n/a"]).menu_input
-            if select_option.lower().strip() == "back":
+            if select_option.upper().strip() == "B":
                 Utility.clear_screen()
                 break
             else:
@@ -761,13 +760,13 @@ class MenuScreens:
             sql_number = int(sql_number)
         
         self._edit_screen(editing_asset, True)
-        print("back: Go back to previous screen.\n")
+        print("B: Go back to previous screen.\n")
         print(f"Current {attribute.capitalize()}: {sql_number}\n")
         
         while True:
             print("Warning: Current data will be overwritten")
             new_number = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
-            if new_number.lower() == "back":
+            if new_number.upper() == "B":
                 break
             try:
                 new_number = float(new_number)
@@ -788,7 +787,7 @@ class MenuScreens:
         if sql_data is None or sql_data == "None" or sql_data == "":
             sql_data = "empty"
         self._edit_screen(editing_asset, True)
-        print("back: Go back to previous screen.\n")
+        print("B: Go back to previous screen.\n")
         print(f"{attribute.capitalize()} current data: {sql_data}\n")
         
         while True:
@@ -796,7 +795,7 @@ class MenuScreens:
             new_data = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
             if new_data is None:
                 continue
-            elif new_data.lower() == "back":
+            elif new_data.upper() == "B":
                 break
             elif len(new_data) >= 255:
                 print("Entry is too long, please shorten to under 255 characters.")
@@ -809,11 +808,11 @@ class MenuScreens:
     def _edit_locked_field(self, editing_asset: object, attribute):
         self._edit_screen(editing_asset, True)
         if attribute == "last_seen":
-            print('This will update when using the "save" command.')
+            print('This will update when using the "S" command.')
             input("Press enter to continue.")
         elif editing_asset.column == "new":
             print(f"{attribute.capitalize()} cannot be edited from this screen.")
-            print('Please use the "back" command and reenter the correct serial and device type.')
+            print('Please use the "B" command and reenter the correct serial and device type.')
             input("Press enter to continue.")
         else:
             print(f"{attribute.capitalize()} is not editable, please contact an admin to fix.")
@@ -836,7 +835,7 @@ class MenuScreens:
             return maria.save_object(editing_asset)
     
     
-    def quit_program(self):
+    def exit_program(self):
         Utility.clear_screen()
         maria.close_connection()
         print("\nGoodbye!\n")
@@ -860,7 +859,7 @@ class MenuFunction:
     ):
         """Instatiates menu input class."""
         
-        # Class variable(s) used to indicate where "cancel" and "back" should go.
+        # Class variable(s) used to indicate where "cancel" (C) and "back" (B) should go.
         self._calling_class = calling_class
         self._back_to = back_to
         self._pass_object = pass_object
@@ -878,10 +877,10 @@ class MenuFunction:
         self._command_options = [(command.lower()) for command in command_options]
         self._command_list = []
         self._command_print_dict = {
-            "clear": ": Clear the screen.",
-            "back": ": Go back to previous screen.",
-            "cancel": ": Go back to main menu.",
-            "quit": ": Quit the program.",
+            "C": ": Clear the screen.",
+            "B": ": Go back to previous screen.",
+            "M": ": Go back to main menu.",
+            "X": ": Exit the program.",
         }
         
         # Input methods not needed if search term is defined by the caller.
@@ -899,18 +898,18 @@ class MenuFunction:
         terminal_width = os.get_terminal_size().columns
         
         if "all" in self._command_options:
-            self._command_list.extend(["clear", "back", "cancel", "quit"])
+            self._command_list.extend(["C", "B", "M", "X"])
         elif ("n/a" in self._command_options):
             return
         else:
             if "clear" in self._command_options:
-                self._command_list.append("clear")
+                self._command_list.append("C")
             if "back" in self._command_options:
-                self._command_list.append("back")
+                self._command_list.append("B")
             if "cancel" in self._command_options:
-                self._command_list.append("cancel")
-            if "quit" in self._command_options:
-                self._command_list.append("quit")
+                self._command_list.append("M")
+            if "exit" in self._command_options:
+                self._command_list.append("X")
         
         print("Command Options:")
         for command in self._command_list:
@@ -926,22 +925,20 @@ class MenuFunction:
     def _get_user_input(self):
         while True:
             user_input = input(self._prompt).strip()
-            
-            test = user_input.lower()                                     #!!!!!!!!!!!!!!!
-            if user_input.lower() in self._command_list:
-                if user_input.lower() == "clear":
+            if user_input.upper() in self._command_list:
+                if user_input.upper() == "C":
                     Utility.clear_screen()
                     break
-                elif user_input.lower() == "back":
+                elif user_input.upper() == "B":
                     if self._pass_object:
                         self._back_to(self._pass_object)
                     else:
                         self._back_to()
-                elif user_input.lower() == "cancel":
+                elif user_input.upper() == "M":
                     self._calling_class.main_menu()
-                elif user_input.lower() == "quit":
-                    self._calling_class.quit_program()
-            elif not user_input or (user_input.lower() not in self._menu_options and "n/a" not in self._menu_options):
+                elif user_input.upper() == "X":
+                    self._calling_class.exit_program()
+            elif not user_input or (user_input.upper() not in self._menu_options and "n/a" not in self._menu_options):
                 print("Invalid input, please try again.\n")
             else:
                 self.menu_input = user_input
