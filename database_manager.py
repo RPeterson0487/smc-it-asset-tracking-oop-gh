@@ -22,22 +22,26 @@ class DatabaseManager:
         self._password = dbconfig.mariadb_login["password"]
 
         # Connection / Cursor variables.
-        self._connection = None
+        self.connection = None
         self._cursor = None
+        
+        # Error variable.
+        self.fail_error = None
         
         # Connection / Cursor method.
         try:
-            self._connection = mariadb.connect(
+            self.connection = mariadb.connect(
                 host=self._database_host,
                 user=self._username,
                 password=self._password,
                 database=self._database_name
             )
 
-            self._cursor = self._connection.cursor(dictionary = True)
+            self._cursor = self.connection.cursor(dictionary = True)
         except Exception as error:
+            self.fail_error = error
             print(f"\nError connecting to database:\n{error}\n")
-
+            return
         
         # Device / Field control variables.
         self.field_control = self._setup_field_control()
@@ -47,11 +51,12 @@ class DatabaseManager:
     def close_connection(self):
         """Commits changes and closes the connection."""
         try:
-            self._connection.commit()
-            self._connection.close()
+            self.connection.commit()
+            self.connection.close()
             print("Connection Closed.")
         except Exception as error:
             print(f"\nError closing database:\n{error}\n")
+            self.fail_error = error
     
     
     def search_tables(self, search_term:str, search_fields: list = [], search_partial: bool = True):
@@ -137,7 +142,7 @@ class DatabaseManager:
         """
         
         self._cursor.execute(query, values)
-        self._connection.commit()
+        self.connection.commit()
         
         if self._cursor.lastrowid:
             object_updated = self._cursor.lastrowid

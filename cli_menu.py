@@ -2,6 +2,7 @@
 
 # Standard library imports.
 from datetime import datetime
+from loguru import logger
 from typing import Literal, Union
 import os
 import re
@@ -48,6 +49,7 @@ class MenuScreens:
             print(self.SEPARATOR)
             
             main_menu_select = MenuFunction(self, "n/a", "Enter menu option: ", list(self._menu_options.keys()), ["n/a"])
+            logger.info(f"Main Menu Select: {main_menu_select.menu_input}")
             menu_action = self._menu_options.get(main_menu_select.menu_input)
             menu_action()
     
@@ -62,6 +64,9 @@ class MenuScreens:
     ):
         option_number = 0
         prefix_list = ["A- Asset Number.", "R- Asset Reference.", "S- Serial."]
+        
+        with logger.contextualize(type_search = type_search, output = output, search_fields = search_fields, search_term = search_term, use_like = use_like):
+            logger.info("Asset Search Start")
         
         if type_search == "basic":
             Utility.clear_screen()
@@ -95,6 +100,9 @@ class MenuScreens:
                         current_line = prefix_string
                 print(current_line)
                 asset_search_term = MenuFunction(self, self.main_menu, search_prompt).menu_input
+                with logger.contextualize(search_prompt=search_prompt):
+                    logger.info(f"Asset Search Term: {asset_search_term}")
+                
             if asset_search_term is None:
                 if type_search == "edit":
                     self.asset_edit()
@@ -121,6 +129,8 @@ class MenuScreens:
                 asset_search_results = maria.search_tables(asset_search_term, None, False)
             else:
                 asset_search_results = maria.search_tables(asset_search_term)
+            with logger.contextualize(search_fields = search_fields, use_like = use_like, asset_search_term = asset_search_term):
+                logger.info(f"Asset search returned {len(asset_search_results)}.")
             
             # Set up output of search results.
             if asset_search_results != "Empty Search":
@@ -164,16 +174,19 @@ class MenuScreens:
                 print()
             use_like = True
             search_fields = []
+            logger.info(f"Asset Search Results: Returned: {len(result_list)}, Migrated: {migrated_count}, Duplicate: {duplicate_count}, Retired: {retired_count}")
             if type_search == "edit":
                 return result_list
 
 
     def asset_edit(self):
         Utility.clear_screen()
+        logger.info("Asset Edit Start")
         while True:
             print(f"==[ EDIT ASSET ]{'=' * (os.get_terminal_size().columns - 16)}")
             search_asset = self.asset_search("edit")
             if not search_asset:
+                logger.info("Asset Edit Search: No results found.")
                 continue
             elif len(search_asset) == 1:
                 select_asset = "1"
@@ -181,7 +194,10 @@ class MenuScreens:
                 select_asset = MenuFunction(self, self.asset_edit, "Select asset to edit: ", [str(i) for i in range(1, len(search_asset) + 1)]).menu_input
                 if select_asset is None:
                     continue
+            with logger.contextualize(select_asset = select_asset):
+                logger.info(f"Asset Edit Selection: {vars(search_asset[int(select_asset) - 1])}")
             asset_id = self._edit_screen(self._process_duplicates_migrations(search_asset[int(select_asset) - 1]))
+            logger.info(f"Asset Edit Complete, Asset ID {asset_id}")
             if asset_id:
                 Utility.clear_screen()
                 print(f"==[ EDIT ASSET ]{'=' * (os.get_terminal_size().columns - 16)}\n")
@@ -194,10 +210,13 @@ class MenuScreens:
     
     def asset_new(self):
         initial_setup = {}
+        
         Utility.clear_screen()
+        logger.info("Asset New Start")
         while True:
             print(f"==[ NEW ASSET ]{'=' * (os.get_terminal_size().columns - 15)}")
             initial_serial = MenuFunction(self, self.main_menu, "Enter full serial: ").menu_input
+            logger.info(f"Asset New Initial Serial: {initial_serial}")
             if initial_serial is None:
                 continue
             else:
@@ -212,6 +231,8 @@ class MenuScreens:
                 continue
             else:
                 initial_type = self._edit_locked_list("device_type")
+                with logger.contextualize(asset_exists = asset_exists):
+                    logger.info(f"Asset New Initial Type: {initial_type}")
                 if initial_type is None:
                     continue
                 device_fields = self._set_device_fields(initial_type)
@@ -226,7 +247,9 @@ class MenuScreens:
                 initial_setup["column"] = "new"
                     
                 new_asset = maria.new_object(initial_setup)
+                logger.info(f"Asset New Asset: {vars(new_asset)}")
                 new_id = self._edit_screen(new_asset, False)
+                logger.info(f"Asset New ID: {new_id}")
                 Utility.clear_screen()
                 print(f"==[ NEW ASSET ]{'=' * (os.get_terminal_size().columns - 15)}\n")
                 print("New asset has been saved to the database.")
@@ -839,6 +862,7 @@ class MenuScreens:
         Utility.clear_screen()
         maria.close_connection()
         print("\nGoodbye!\n")
+        logger.info("-----Ending session.-----")
         exit()
 
 
@@ -960,5 +984,24 @@ class Utility:
 
 
 if __name__ == "__main__":
+    logger.remove(0)
+    logger.add("debug.log", format="{time:MMMM D, YYYY > HH:mm:ss} | {level} | {message} | {extra}")
+    logger = logger.bind(session_id = os.getpid())
+    logger.info("-----Starting session.-----")
+    # with logger.catch():
+    #     maria = database.DatabaseManager()
+    #     if maria.connection:
+    #         start = MenuScreens()
+    #     else:
+    #         print(maria.fail_error)
+    #         logger.critical(maria.fail_error)
+    #         input("Press enter to terminate.")
     maria = database.DatabaseManager()
     start = MenuScreens()
+
+
+
+
+# if __name__ == "__main__":
+#     maria = database.DatabaseManager()
+#     start = MenuScreens()
