@@ -24,8 +24,9 @@ class MenuScreens:
         # Menu options that call methods when selected.
         self._menu_options = {
             "1": self.asset_search,
-            "2": self.asset_edit,
-            "3": self.asset_new,
+            "2": self.asset_full_search,
+            "3": self.asset_edit,
+            "4": self.asset_new,
             "0": self.exit_program,
         }
         
@@ -39,9 +40,10 @@ class MenuScreens:
         Utility.clear_screen()
         while True:
             print(f"==[ MAIN MENU ]{'=' * (os.get_terminal_size().columns - 15)}\n")
-            print("1)  Search for asset")
-            print("2)  Edit existing asset")
-            print("3)  Create new asset")
+            print('1)  Basic output "label" search')
+            print('2)  Extended output "full" search')
+            print("3)  Edit existing asset")
+            print("4)  Create new asset")
             print("0)  Exit program")
             print(self.SEPARATOR)
             
@@ -80,7 +82,7 @@ class MenuScreens:
             elif type_search == "edit":
                 search_prompt = "Search for asset to edit: "
             else:
-                print(f"==[ BASIC SEARCH ]{'=' * (os.get_terminal_size().columns - 18)}")
+                print(f"==[ ASSET SEARCH ]{'=' * (os.get_terminal_size().columns - 18)}")
                 search_prompt = "Search for asset: "
                 
             # Search for asset.
@@ -174,6 +176,10 @@ class MenuScreens:
             logger.info(f"Asset Search Results: Returned: {len(result_list)}, Migrated: {migrated_count}, Duplicate: {duplicate_count}, Retired: {retired_count}")
             if type_search == "edit":
                 return result_list
+    
+    
+    def asset_full_search(self):
+        self.asset_search(output="full")
 
 
     def asset_edit(self):
@@ -228,7 +234,7 @@ class MenuScreens:
                 Utility.clear_screen()
                 continue
             else:
-                initial_type = self._edit_locked_list("device_type")
+                initial_type = self._edit_fixed_list("device_type")
                 logger.info(f"Asset New Initial Type: {initial_type}")
                 if initial_type is None:
                     continue
@@ -514,9 +520,10 @@ class MenuScreens:
     
     def _set_device_fields(self, asset: Union[object, str]):
         fields_dictionary = {}
+        control_fields = ("device_type", "status", "entity", "building", "manufacturer", "operating_system")
         display_fields = []
         
-        if asset not in ("device_type", "status"):
+        if asset not in control_fields:
             fields_dictionary["Common"] = maria.field_control["Common"]
         if isinstance(asset, str):
             asset_type = asset
@@ -526,7 +533,7 @@ class MenuScreens:
             return None
         fields_dictionary[asset_type] = maria.field_control[asset_type]
         
-        if asset in ("device_type", "status"):
+        if asset in control_fields:
             display_fields = fields_dictionary[asset_type]
         else:
             for field in maria.insert_key_list:
@@ -550,9 +557,9 @@ class MenuScreens:
         while True:
             fields = []
             ignore_keys = ["is_verified", "table", "column"]
-            locked_fields = ["asset_number", "serial", "device_type", "last_seen"]
-            locked_list_fields = ("device_type", "status")
-            required_fields = ["manufacturer", "model", "entity", "building", "department"]
+            locked_fields = ["asset_number", "serial", "last_seen"]
+            fixed_list_fields = ("device_type", "status", "entity", "building", "manufacturer", "operating_system")
+            required_fields = ["device_type", "manufacturer", "model", "entity", "building", "department"]
             date_fields = ("deployment_date", "purchase_date", "contract_expiration_date")
             float_fields = ("purchase_price","contract_amount")
             int_fields = ()
@@ -560,8 +567,8 @@ class MenuScreens:
             option_number = 0
             
             Utility.clear_screen()
-            with logger.contextualize(short = short):
-                logger.info(f"Edit Screen Start")
+            # with logger.contextualize(short = short):
+            #     logger.info(f"Edit Screen Start")
             if not hasattr(asset, "serial") or not getattr(asset, "serial", ""):
                 logger.info("Edit Screen: No Serial")
                 locked_fields.remove("serial")
@@ -570,6 +577,8 @@ class MenuScreens:
             if asset.column == "new":
                 print(f"==[ NEW ASSET ]{'=' * (os.get_terminal_size().columns - 15)}\n")
                 ignore_keys.append("asset_number")
+                required_fields.remove("device_type")
+                locked_fields.append("device_type")
                 back_command = self.asset_new
             elif asset.column == "migrate":
                 print(f"==[ MIGRATING ASSET ]{'=' * (os.get_terminal_size().columns - 21)}\n")
@@ -631,8 +640,8 @@ class MenuScreens:
                     self._edit_number_field(asset, fields[int(select_field) - 1], int)
                 elif fields[int(select_field) - 1] in locked_fields and asset.column:
                     self._edit_locked_field(asset, fields[int(select_field) - 1])
-                elif fields[int(select_field) - 1] in locked_list_fields:
-                    self._edit_locked_list(fields[int(select_field) - 1], asset)
+                elif fields[int(select_field) - 1] in fixed_list_fields:
+                    self._edit_fixed_list(fields[int(select_field) - 1], asset)
                 else:
                     self._edit_field(asset, fields[int(select_field) - 1])
 
@@ -652,7 +661,7 @@ class MenuScreens:
         while True:
             print("Warning: Current date will be overwritten")
             new_date = MenuFunction(self, self._edit_screen, "Enter new date (MM/DD/YYYY): ", ["n/a"], ["n/a"], editing_asset).menu_input
-            with logger.contextualize(attribute=attribute):
+            with logger.contextualize(attribute=attribute, sql_date = sql_date):
                 logger.info(f"Edit Date New Date: {new_date}")
             if new_date is None:
                 continue
@@ -725,7 +734,7 @@ class MenuScreens:
                     print("Warning: Current entry will be overwritten")
                     prompt = "Enter command or new entry: "
                 edit_entry = MenuFunction(self, "n/a", prompt, ["n/a"], ["n/a"]).menu_input
-                with logger.contextualize(current_entry = entries_list[int(select_entry) - 1]):
+                with logger.contextualize(current_entry = entries_list[int(select_entry) - 1] if len(entries_list) > int(select_entry) - 1 else "Empty"):
                     logger.info(f"Edit Notes Edit Entry: {edit_entry}")
                 if edit_entry.upper().strip() == "B":
                     logger.info("Edit List Edit Entry Back")
@@ -737,7 +746,7 @@ class MenuScreens:
                         break
                     else:
                         entries_list.pop(int(select_entry) - 1)
-                        logger.info(f"Edit List Delete {(int(select_entry) - 1)}")
+                        logger.info(f"Edit List Delete {(int(select_entry))}")
                 else:
                     if int(select_entry) == (len(entries_list) + 1):
                         if len(" --- ".join(entries_list)) + len(edit_entry) >= 225:
@@ -768,7 +777,8 @@ class MenuScreens:
         print(self.SEPARATOR)
     
     
-    def _edit_locked_list(self, asset_field: Literal["device_type", "status"], editing_asset: object = None):
+    def _edit_fixed_list(self, asset_field: str, editing_asset: object = None):
+        restricted = ("device_type", "status")
         options = self._set_device_fields(asset_field)
         
         while True:
@@ -780,11 +790,13 @@ class MenuScreens:
                     print(f"==[ DEVICE TYPE ]{'=' * (os.get_terminal_size().columns - 17)}\n")
                 else:
                     print(f"==[ DEVICE STATUS ]{'=' * (os.get_terminal_size().columns - 19)}\n")
-                    
-            if asset_field == "device_type":
-                option_prompt = "Select device type: "
+            
+            if asset_field in restricted:
+                option_prompt = f"Select {asset_field}: "
+                option_list_set = None
             else:
-                option_prompt = "Select device status: "
+                option_prompt = f"Select or enter {asset_field}: "
+                option_list_set = "n/a"
             
             if editing_asset:
                 if getattr(editing_asset, asset_field) is not None:
@@ -797,26 +809,33 @@ class MenuScreens:
                 print(f"{option_number})  {items}")
             option_list = [str(i) for i in range(1, len(options) + 1)]
             option_list.append("B")
+            if not option_list_set:
+                option_list_set = option_list
             print(self.SEPARATOR)
             print("B: Go back to previous screen.\n")
             
-            select_option = MenuFunction(self, "n/a", option_prompt, option_list, ["n/a"]).menu_input
+            select_option = MenuFunction(self, "n/a", option_prompt, option_list_set, ["n/a"]).menu_input
             with logger.contextualize(asset_field = asset_field):
-                logger.info(f"Edit Locked List Select Option: {select_option}")
+                logger.info(f"Edit Fixed List Select Option: {select_option}")
+                
             if select_option.upper().strip() == "B":
-                with logger.contextualize(editing_asset = vars(editing_asset)):
-                    logger.info("Edit Locked List Back")
+                logger.info("Edit Fixed List Back")
                 Utility.clear_screen()
                 break
+            elif editing_asset and select_option not in option_list and asset_field not in restricted:
+                setattr(editing_asset, asset_field, select_option)
+                with logger.contextualize(editing_asset = vars(editing_asset)):
+                    logger.info("Edit Fixed List Set")
+                break
             else:
-                logger.info(f"Edit Locked List Select Option: {options[int(select_option) - 1]}")
+                logger.info(f"Edit Fixed List Select Option: {options[int(select_option) - 1]}")
                 if editing_asset:
-                    with logger.contextualize(editing_asset = vars(editing_asset)):
-                        logger.info("Edit Locked List Set")
                     setattr(editing_asset, asset_field, options[int(select_option) - 1])
+                    with logger.contextualize(editing_asset = vars(editing_asset)):
+                        logger.info("Edit Fixed List Set")
                     break
                 else:
-                    logger.info("Edit Locked List Return")
+                    logger.info("Edit Fixed List Return")
                     return options[int(select_option) - 1]
                 
         
@@ -837,15 +856,15 @@ class MenuScreens:
         while True:
             print("Warning: Current data will be overwritten")
             new_number = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
-            with logger.contextualize(attribute = attribute, data_type = data_type, sql_number = sql_number):
+            with logger.contextualize(attribute = attribute,sql_number = sql_number, data_type = data_type):
                 logger.info(f"Edit Number: {new_number}")
             if new_number.upper() == "B":
+                logger.info("Edit Number Back Command")
                 break
             try:
                 new_number = float(new_number)
             except ValueError as error:
                 logger.error(f"Edit Number Error: {error}")
-                print(f"\n{error}\n")
                 print("Invalid input, please try again.\n")
                 
                 continue
@@ -854,7 +873,8 @@ class MenuScreens:
             else:
                 new_number = int(new_number)
             setattr(editing_asset, attribute, new_number)
-            logger.info(f"Edit Number New Number: {type(new_number)}, {new_number}")
+            with logger.contextualize(editing_asset = vars(editing_asset)):
+                logger.info(f"Edit Number Set ({type(new_number)})")
             break
         
     
@@ -874,6 +894,7 @@ class MenuScreens:
             if new_data is None:
                 continue
             elif new_data.upper() == "B":
+                logger.info("Edit Field Back Command.")
                 break
             elif len(new_data) >= 255:
                 print("Entry is too long, please shorten to under 255 characters.")
@@ -881,6 +902,8 @@ class MenuScreens:
                 continue
             else:
                 setattr(editing_asset, attribute, new_data)
+                with logger.contextualize(editing_asset = vars(editing_asset)):
+                    logger.info("Edit Field Set")
                 break
     
     
