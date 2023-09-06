@@ -6,6 +6,7 @@ from loguru import logger
 from typing import Literal, Union
 import os
 import re
+import sys
 
 # Third party imports.
 
@@ -59,7 +60,8 @@ class MenuScreens:
         output: Literal["limited", "full", "none"] = "limited",
         search_fields: list = [],
         search_term: str = None,
-        use_like: bool = True
+        use_like: bool = True,
+        full_return = False,
     ):
         option_number = 0
         prefix_list = ["A- Asset Number.", "R- Asset Reference.", "S- Serial."]
@@ -81,9 +83,11 @@ class MenuScreens:
                 search_prompt = None
             elif type_search == "edit":
                 search_prompt = "Search for asset to edit: "
+                command_inputs = ["back", "cancel", "exit"]
             else:
                 print(f"==[ ASSET SEARCH ]{'=' * (os.get_terminal_size().columns - 18)}")
                 search_prompt = "Search for asset: "
+                command_inputs = ["all"]
                 
             # Search for asset.
             if search_term or search_term == "":
@@ -98,7 +102,7 @@ class MenuScreens:
                         print(current_line)
                         current_line = prefix_string
                 print(current_line)
-                asset_search_term = MenuFunction(self, self.main_menu, search_prompt).menu_input
+                asset_search_term = MenuFunction(self, self.main_menu, search_prompt, command_options = command_inputs).menu_input
                 with logger.contextualize(search_prompt = search_prompt):
                     logger.info(f"Asset Search Term: {asset_search_term}")
                 
@@ -174,7 +178,9 @@ class MenuScreens:
             use_like = True
             search_fields = []
             logger.info(f"Asset Search Results: Returned: {len(result_list)}, Migrated: {migrated_count}, Duplicate: {duplicate_count}, Retired: {retired_count}")
-            if type_search == "edit":
+            if full_return:
+                return asset_search_results
+            elif type_search == "edit":
                 return result_list
     
     
@@ -194,11 +200,12 @@ class MenuScreens:
             elif len(search_asset) == 1:
                 select_asset = "1"
             else:
-                select_asset = MenuFunction(self, self.asset_edit, "Select asset to edit: ", [str(i) for i in range(1, len(search_asset) + 1)]).menu_input
-                with logger.contextualize(select_asset = select_asset):
-                    logger.info(f"Asset Edit Selection: {vars(search_asset[int(select_asset) - 1])}")
+                select_asset = MenuFunction(self, self.asset_edit, "Select asset to edit: ", [str(i) for i in range(1, len(search_asset) + 1)], ["back", "cancel", "exit"]).menu_input
                 if select_asset is None:
                     continue
+                else:
+                    with logger.contextualize(select_asset = select_asset):
+                        logger.info(f"Asset Edit Selection: {vars(search_asset[int(select_asset) - 1])}")
             asset_id = self._edit_screen(self._process_duplicates_migrations(search_asset[int(select_asset) - 1]))
             logger.info(f"Asset Edit Complete, Asset ID {asset_id}")
             if asset_id:
@@ -223,7 +230,7 @@ class MenuScreens:
             if initial_serial is None:
                 continue
             else:
-                asset_exists = self.asset_search("edit", "none", ["Serial", "serial"], initial_serial, False)
+                asset_exists = self.asset_search("edit", "none", ["Serial", "serial"], initial_serial, False, True)
             
             if asset_exists:
                 logger.error(f"Asset Exists: {asset_exists}")
@@ -559,8 +566,8 @@ class MenuScreens:
             ignore_keys = ["is_verified", "table", "column"]
             locked_fields = ["asset_number", "serial", "last_seen"]
             fixed_list_fields = ("device_type", "status", "entity", "building", "manufacturer", "operating_system")
-            required_fields = ["device_type", "manufacturer", "model", "entity", "building", "department"]
-            date_fields = ("deployment_date", "purchase_date", "contract_expiration_date")
+            required_fields = ["device_type", "manufacturer", "model", "entity", "building", "department", "status"]
+            date_fields = ("deployment_date", "purchase_date", "contract_expiration_date", "last_seen")
             float_fields = ("purchase_price","contract_amount")
             int_fields = ()
             list_fields = ("asset_reference", "notes")
@@ -656,7 +663,7 @@ class MenuScreens:
         
         self._edit_screen(editing_asset, True)
         print("B: Go back to previous screen.\n")
-        print(f"{attribute.capitalize()} current date: {display_date}\n")
+        print(f"{attribute.capitalize().replace('_', ' ')} current date: {display_date}\n")
         
         while True:
             print("Warning: Current date will be overwritten")
@@ -685,14 +692,27 @@ class MenuScreens:
         try:
             date_object = datetime.strptime(date, "%Y-%m-%d")
             formatted_date = date_object.strftime("%m/%d/%Y")
+            return formatted_date
         except ValueError:
-            try:
-                date_object = datetime.strptime(date, "%m/%d/%Y")
-                formatted_date = date_object.strftime("%Y-%m-%d")
-            except ValueError as error:
-                return None
-        logger.info(f"Convert Date: {date} to {formatted_date}")
-        return formatted_date
+            pass
+        try:
+            date_object = datetime.strptime(date, "%m/%d/%Y")
+            formatted_date = date_object.strftime("%Y-%m-%d")
+            return formatted_date
+        except ValueError:
+            pass
+        try:
+            date_object = datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+            formatted_date = date_object.strftime("%m/%d/%Y %H:%M:%S")
+            return formatted_date
+        except ValueError:
+            pass
+        try:
+            date_object = datetime.strptime(date, "%m/%d/%Y %H:%M:%S")
+            formatted_date = date_object.strftime("%Y-%m-%d %H:%M:%S")
+            return formatted_date
+        except ValueError:
+            return None
     
     
     def _edit_list_field(self, editing_asset: object, attribute):
@@ -726,13 +746,13 @@ class MenuScreens:
                     logger.info("Edit List New Entry")
                     print("B: Go back to previous screen.\n")
                     print("New entry\n")
-                    prompt = "Enter command or new entry: "
                 else:
                     logger.info(f"Edit List Current Entry: {entries_list[int(select_entry) - 1]}")
-                    print("B: Go back to previous screen.    delete: Delete this entry\n")
-                    print(f"Current entry: {entries_list[int(select_entry) - 1]}\n")
+                    print("B: Go back to previous screen.    D: Delete this entry\n")
+                    print(f"Current entry: {entries_list[int(select_entry) - 1].replace('_', ' ')}\n")
                     print("Warning: Current entry will be overwritten")
-                    prompt = "Enter command or new entry: "
+                    
+                prompt = f"Enter command or new {attribute[:-1].replace('_', ' ') if attribute.endswith('s') else attribute.replace('_', ' ')}: "
                 edit_entry = MenuFunction(self, "n/a", prompt, ["n/a"], ["n/a"]).menu_input
                 with logger.contextualize(current_entry = entries_list[int(select_entry) - 1] if len(entries_list) > int(select_entry) - 1 else "Empty"):
                     logger.info(f"Edit Notes Edit Entry: {edit_entry}")
@@ -767,7 +787,7 @@ class MenuScreens:
         option_number = 0
         
         self._edit_screen(asset, True)
-        print(f"{display_attribute.capitalize()} current entries:\n")
+        print(f"{display_attribute.capitalize().replace('_', ' ')} current entries:\n")
         
         for entry in entries:
             option_number += 1
@@ -792,17 +812,17 @@ class MenuScreens:
                     print(f"==[ DEVICE STATUS ]{'=' * (os.get_terminal_size().columns - 19)}\n")
             
             if asset_field in restricted:
-                option_prompt = f"Select {asset_field}: "
+                option_prompt = f"Select {asset_field.replace('_', ' ')}: "
                 option_list_set = None
             else:
-                option_prompt = f"Select or enter {asset_field}: "
+                option_prompt = f"Enter or select {asset_field.replace('_', ' ')}: "
                 option_list_set = "n/a"
             
             if editing_asset:
                 if getattr(editing_asset, asset_field) is not None:
-                    print(f"{asset_field.capitalize()} current setting: {getattr(editing_asset, asset_field)}\n")
+                    print(f"{asset_field.capitalize().replace('_', ' ')} current setting: {getattr(editing_asset, asset_field)}\n")
                 else:
-                    print(f"{asset_field.capitalize()} has not been set.\n")
+                    print(f"{asset_field.capitalize().replace('_', ' ')} has not been set.\n")
             option_number = 0
             for items in options:
                 option_number += 1
@@ -851,11 +871,11 @@ class MenuScreens:
         
         self._edit_screen(editing_asset, True)
         print("B: Go back to previous screen.\n")
-        print(f"Current {attribute.capitalize()}: {sql_number}\n")
+        print(f"Current {attribute.capitalize().replace('_', ' ')}: {sql_number}\n")
         
         while True:
-            print("Warning: Current data will be overwritten")
-            new_number = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
+            print("Warning: Current entry will be overwritten")
+            new_number = MenuFunction(self, self._edit_screen, f"Enter new {attribute.replace('_', ' ')}: ", ["n/a"], ["n/a"], editing_asset).menu_input
             with logger.contextualize(attribute = attribute,sql_number = sql_number, data_type = data_type):
                 logger.info(f"Edit Number: {new_number}")
             if new_number.upper() == "B":
@@ -884,11 +904,11 @@ class MenuScreens:
             sql_data = "empty"
         self._edit_screen(editing_asset, True)
         print("B: Go back to previous screen.\n")
-        print(f"{attribute.capitalize()} current data: {sql_data}\n")
+        print(f"{attribute.capitalize().replace('_', ' ')} current entry: {sql_data}\n")
         
         while True:
-            print("Warning: Current data will be overwritten")
-            new_data = MenuFunction(self, self._edit_screen, "Enter new data: ", ["n/a"], ["n/a"], editing_asset).menu_input
+            print("Warning: Current entry will be overwritten")
+            new_data = MenuFunction(self, self._edit_screen, f"Enter new {attribute.replace('_', ' ')}: ", ["n/a"], ["n/a"], editing_asset).menu_input
             with logger.contextualize(attribute = attribute, sql_data = sql_data):
                 logger.info(f"Edit Field New Data: {new_data}")
             if new_data is None:
@@ -914,11 +934,11 @@ class MenuScreens:
             print('This will update when using the "S" command.')
             input("Press enter to continue.")
         elif editing_asset.column == "new":
-            print(f"{attribute.capitalize()} cannot be edited from this screen.")
+            print(f"{attribute.capitalize().replace('_', ' ')} cannot be edited from this screen.")
             print('Please use the "B" command and reenter the correct serial and device type.')
             input("Press enter to continue.")
         else:
-            print(f"{attribute.capitalize()} is not editable, please contact an admin to fix.")
+            print(f"{attribute.capitalize().replace('_', ' ')} is not editable, please contact an admin to fix.")
             input("Press enter to continue.")
     
     
@@ -936,7 +956,7 @@ class MenuScreens:
             print(", ".join(missing_fields))
             print()
         else:
-            current_date = datetime.now().date()
+            current_date = datetime.now()
             editing_asset.last_seen = current_date
             return maria.save_object(editing_asset)
     
@@ -1032,6 +1052,15 @@ class MenuFunction:
     def _get_user_input(self):
         while True:
             user_input = input(self._prompt).strip()
+            
+            if os.name == "posix":
+                import termios
+                termios.tcflush(sys.stdin, termios.TCIOFLUSH)
+            else:
+                import msvcrt
+                while msvcrt.kbhit():
+                    msvcrt.getch()
+            
             if user_input.upper() in self._command_list:
                 if user_input.upper() == "C":
                     Utility.clear_screen()
