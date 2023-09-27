@@ -14,11 +14,13 @@ import sys
 import database_manager as database
 
 
-class MenuScreens:
+class CommandClass:
     """Initializes Main Menu and runs program."""
 
     def __init__(self):
         """Displays the main menu and asks for input."""
+        
+        self._terminal_width = None
         
         # Menu options that call methods when selected.
         self._menu_options = {
@@ -26,6 +28,7 @@ class MenuScreens:
             "2": self.asset_full_search,
             "3": self.asset_edit,
             "4": self.asset_new,
+            "5": self.asset_print,
             "0": self.exit_program,
         }
         
@@ -36,28 +39,29 @@ class MenuScreens:
     def main_menu(self):
         """Display the main menu and wait for user input."""
         
-        # Resets terminal width used for separators and wrapping.
-        self._terminal_width = os.get_terminal_size().columns
-        
-        Utility.clear_screen()
+        self.clear_screen()
         while True:
+            # Resets terminal width used for separators and wrapping.
+            self._terminal_width = os.get_terminal_size().columns
+            
+            if maria.database_name == "smc_db_TEST":
+                print("!!!TEST MODE!!!\n\n")
+        
             print(f"==[ MAIN MENU ]{'=' * (self._terminal_width - 15)}\n")
             print('1)  Basic output "label" search')
             print('2)  Extended output "full" search')
             print("3)  Edit existing asset")
             print("4)  Create new asset")
+            print("5)  Print asset report")
             print("0)  Exit program")
             print("-" * self._terminal_width)
             
-            # main_menu_select = MenuFunction(self, "n/a", "Enter menu option: ", list(self._menu_options.keys()), ["n/a"])
-            
             menu_options = list(self._menu_options.keys())
-            main_menu_select = self.menu_input("Enter menu option: ", menu_options)
-                
-            
+            main_menu_select = self.menu_input("Enter menu option: ", menu_options, True)
             logger.info(f"Main Menu Select: {main_menu_select}")
             menu_action = self._menu_options.get(main_menu_select)
             menu_action()
+            self.clear_screen()
     
 
     def asset_search(
@@ -68,20 +72,24 @@ class MenuScreens:
         search_term: str = None,
         use_like: bool = True,
         full_return = False,
+        second_search = False
     ):
         option_number = 0
-        prefix_list = ["A- Asset Number.", "R- Asset Reference.", "S- Serial."]
+        prefix_list = ["A- Asset Number.", "R- Asset Reference.", "S- Serial.", "H- Hidden (all)", "D- Destroyed/Retired"]
+        hidden_results = None
         
         with logger.contextualize(type_search = type_search, output = output, search_fields = search_fields, search_term = search_term, use_like = use_like):
             logger.info("Asset Search Start")
         
-        if type_search == "basic":
-            Utility.clear_screen()
+        if type_search == "basic" and not second_search:
+            self.clear_screen()
         while True:
             current_line = ""
             duplicate_count = 0
             migrated_count = 0
             retired_count = 0
+            hidden_list = []
+            retired_list = []
             result_list = []
             
             # Set up menu and intial search prompt.
@@ -89,11 +97,11 @@ class MenuScreens:
                 search_prompt = None
             elif type_search == "edit":
                 search_prompt = "Search for asset to edit: "
-                command_inputs = ["back", "cancel", "exit"]
+                command_inputs = ["B", "X"]
             else:
-                print(f"==[ ASSET SEARCH ]{'=' * (self.terminal_width - 18)}")
+                print(f"==[ ASSET SEARCH ]{'=' * (self._terminal_width - 18)}")
                 search_prompt = "Search for asset: "
-                command_inputs = ["all"]
+                command_inputs = ["B", "C", "X"]
                 
             # Search for asset.
             if search_term or search_term == "":
@@ -108,20 +116,25 @@ class MenuScreens:
                         print(current_line)
                         current_line = prefix_string
                 print(current_line)
-                asset_search_term = MenuFunction(self, self.main_menu, search_prompt, command_options = command_inputs).menu_input
-                with logger.contextualize(search_prompt = search_prompt):
-                    logger.info(f"Asset Search Term: {asset_search_term}")
                 
-            if asset_search_term is None:
-                if type_search == "edit":
-                    self.asset_edit()
-                else:
+                asset_search_term = self.menu_input(search_prompt, command_inputs)
+                if not asset_search_term:
+                    continue
+                elif type_search == "edit" and asset_search_term.upper() == "B":
+                    return "go_back"
+                elif type_search != "edit" and asset_search_term.upper() == "B":
+                    break
+                elif len(asset_search_term) < 3:
+                    print("Search term too short, please refine your search to at least three characters.\n")
                     continue
                 
-            if asset_search_term[0:2].upper() == "A-":
+            with logger.contextualize(search_prompt = search_prompt):
+                logger.info(f"Asset Search Term: {asset_search_term}")
+                
+            if asset_search_term[0:2].upper() == "A-" or (asset_search_term[0] == "0" and "serial" not in search_fields):
                 search_fields.extend(["Asset", "asset_number"])
                 use_like = False
-                asset_search_term = asset_search_term[2:]
+                asset_search_term = asset_search_term[2:].lstrip("0")
             elif asset_search_term[0:2].upper() == "R-":
                 search_fields.extend(["asset_reference"])
                 asset_search_term = asset_search_term[2:]
@@ -129,6 +142,13 @@ class MenuScreens:
                 search_fields.extend(["serial", "Serial"])
                 use_like = False
                 asset_search_term = asset_search_term[2:]
+            elif asset_search_term[0:2].upper() == "H-":
+                hidden_results = "all"
+                asset_search_term = asset_search_term[2:]
+            elif asset_search_term[0:2].upper() == "D-":
+                hidden_results = "limited"
+                asset_search_term = asset_search_term[2:]
+                
             
             if search_fields and use_like:
                 asset_search_results = maria.search_tables(asset_search_term, search_fields)
@@ -141,110 +161,196 @@ class MenuScreens:
             with logger.contextualize(search_fields = search_fields, use_like = use_like, asset_search_term = asset_search_term):
                 logger.info(f"Asset search returned: {len(asset_search_results)}.")
             
+            if second_search:
+                return asset_search_results
+            elif "asset_number" in search_fields and not asset_search_results:
+                print("\nNo results found, searching under general.")
+                asset_search_results = self.asset_search(type_search, output, [], asset_search_term, True, full_return, True)
+            
             # Set up output of search results.
             if asset_search_results != "Empty Search":
                 for result in asset_search_results:
                     if result.table == "IT_Assets" and (result.status == "Retired" or result.status == "Destroyed"):
                         retired_count += 1
+                        retired_list.append(result)
                     elif result.table != "IT_Assets" and result.is_migrated == 1:
                         migrated_count += 1
+                        hidden_list.append(result)
                     elif result.table != "IT_Assets" and result.is_duplicate == 1:
                         duplicate_count += 1
+                        hidden_list.append(result)
                     else:
                         result_list.append(result)
                     
+            if hidden_results == "all":
+                output_list = retired_list + hidden_list
+            elif hidden_results == "limited":
+                output_list = retired_list
+            else:
+                output_list = result_list
+            
             # Output search results.
             if output != "none":
-                for entry in result_list:
+                for entry in output_list:
                     device_fields = self._set_device_fields(entry)
                     print()
-                    if type_search == "edit" and len(result_list) >= 2:
+                    if type_search == "edit" and len(output_list) >= 2:
                         option_number += 1
                         print(f"Option {option_number})\n")
-                    if type_search != "edit" or (type_search == "edit" and len(result_list) >= 2):
+                    if type_search != "edit" or (type_search == "edit" and len(output_list) >= 2):
                         if output == "full":
                             entry.output(False, device_fields)
                         elif output == "limited":
                             entry.output()
-                        print("-" * self.terminal_width)
+                        print("-" * self._terminal_width)
             
             # Print results summary and / or return results if applicable.
             if output != "none":
                 if migrated_count or duplicate_count or retired_count:
-                    print(f"Showing {len(result_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
+                    print(f"Showing {len(output_list)} of {len(asset_search_results)} result{'' if (asset_search_results) == 1 else 's'}.")
                 else:
-                    print(f"Found {len(result_list)} result{'' if (asset_search_results) == 1 else 's'}.")
+                    print(f"Found {len(output_list)} result{'' if (asset_search_results) == 1 else 's'}.")
                 if migrated_count:
-                    print(f"{migrated_count} entr{'y' if migrated_count == 1 else 'ies'} marked migrated hidden.")
+                    print(f"{migrated_count} entr{'y' if migrated_count == 1 else 'ies'} marked migrated {'shown' if hidden_results == 'all' else 'hidden'}.")
                 if duplicate_count:
-                    print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate hidden.")
+                    print(f"{duplicate_count} entr{'y' if duplicate_count == 1 else 'ies'} marked duplicate {'shown' if hidden_results == 'all' else 'hidden'}.")
                 if retired_count:
-                    print(f"{retired_count} entr{'y' if retired_count == 1 else 'ies'} marked retired or destroyed hidden.")
+                    print(f"{retired_count} entr{'y' if retired_count == 1 else 'ies'} marked retired or destroyed {'hidden' if not hidden_results else 'shown'}.")
                 print()
+            with logger.contextualize(hidden_results = hidden_results):
+                logger.info(f"Asset Search Results: Returned: {len(output_list)}, Migrated: {migrated_count}, Duplicate: {duplicate_count}, Retired: {retired_count}")
+            
+            hidden_results = False
             use_like = True
             search_fields = []
-            logger.info(f"Asset Search Results: Returned: {len(result_list)}, Migrated: {migrated_count}, Duplicate: {duplicate_count}, Retired: {retired_count}")
+            
             if full_return:
                 return asset_search_results
             elif type_search == "edit":
-                return result_list
+                return output_list
     
     
     def asset_full_search(self):
         self.asset_search(output="full")
-
-
-    def asset_edit(self):
-        Utility.clear_screen()
-        logger.info("Asset Edit Start")
+    
+    
+    def asset_print(self):
+        self.clear_screen()
+        logger.info("Asset Print Start")
         while True:
-            print(f"==[ EDIT ASSET ]{'=' * (self.terminal_width - 16)}")
-            search_asset = self.asset_search("edit")
+            print(f"==[ PRINT ASSET REPORT ]{'=' * (self._terminal_width - 24)}")
+            search_asset = self.asset_search(type_search="edit", search_fields=[], output="full")
             if not search_asset:
-                logger.info("Asset Edit Search: No results found.")
+                logger.info("Asset Print Search: No results found.")
                 continue
+            elif search_asset == "go_back":
+                break
             elif len(search_asset) == 1:
                 select_asset = "1"
             else:
-                select_asset = MenuFunction(self, self.asset_edit, "Select asset to edit: ", [str(i) for i in range(1, len(search_asset) + 1)], ["back", "cancel", "exit"]).menu_input
-                if select_asset is None:
+                select_asset = self.menu_input("Select asset report to print: ", [str(i) for i in range(1, len(search_asset) + 1)] + ["B", "M", "X"], True)
+            if select_asset.upper() == "B":
+                self.clear_screen()
+                continue
+            else:
+                header = ["Asset Report"]
+                if hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 0:
+                    header.append("Migration Status: This device has not yet been migrated to the new tracking table.")
+                elif hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 1:
+                    header.append("Migration Status: This device has been migrated and cannot be edited.")
+                try:
+                    self.output_to_printer(search_asset[int(select_asset) - 1], header)
+                except:
+                    print("\n\n!!! An error has occurred, please try again later. !!!\n")
+                    input("Press enter to continue.")
+                    self.clear_screen()
+                    continue
+                print("\nAsset report sent to the printer\n")
+
+
+    def asset_edit(self):
+        self.clear_screen()
+        logger.info("Asset Edit Start")
+        while True:
+            print(f"==[ EDIT ASSET ]{'=' * (self._terminal_width - 16)}")
+            search_asset = self.asset_search(type_search="edit", search_fields=[])
+            if not search_asset:
+                logger.info("Asset Edit Search: No results found.")
+                continue
+            elif search_asset == "go_back":
+                break
+            elif len(search_asset) == 1:
+                if hasattr(search_asset[0], "is_migrated") and search_asset[0].is_migrated == 1:
+                    print("This asset has been migrated.  Please find the new asset and edit it.\n")
+                    input("Press enter to continue.\n")
+                    self.clear_screen()
+                    continue
+                elif hasattr(search_asset[0], "is_duplicate") and search_asset[0].is_duplicate == 1:
+                    print("This asset has been marked as a duplicate of another.  Please find that device and edit it.\n")
+                    input("Press enter to continue.\n")
+                    self.clear_screen()
                     continue
                 else:
-                    with logger.contextualize(select_asset = select_asset):
-                        logger.info(f"Asset Edit Selection: {vars(search_asset[int(select_asset) - 1])}")
-            asset_id = self._edit_screen(self._process_duplicates_migrations(search_asset[int(select_asset) - 1]))
+                    select_asset = "1"
+            else:
+                while True:
+                    select_asset = self.menu_input("Select asset to edit: ", [str(i) for i in range(1, len(search_asset) + 1)] + ["B", "M", "X"], True)
+                    if select_asset.upper() != "B" and hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 1:
+                        print("\nThis asset has been migrated.  Please find the new asset and edit it.\n")
+                        continue
+                    elif select_asset.upper() != "B" and hasattr(search_asset[int(select_asset) - 1], "is_duplicate") and search_asset[int(select_asset) - 1].is_duplicate == 1:
+                        print("\nThis asset has been marked as a duplicate of another.  Please find that device and edit it.\n")
+                        continue
+                    if select_asset.upper() != "B":
+                        with logger.contextualize(select_asset = select_asset):
+                            logger.info(f"Asset Edit Selection: {vars(search_asset[int(select_asset) - 1])}")
+                    else:
+                        with logger.contextualize(select_asset = select_asset):
+                            logger.info(f"Asset Edit Selection: Back")
+                    break
+                if select_asset.upper() == "B":
+                    self.clear_screen()
+                    continue
+                        
+            duplicate_migration_check = self._process_duplicates_migrations(search_asset[int(select_asset) - 1])
+            if not duplicate_migration_check:
+                break
+            else:
+                asset_id = self._edit_screen(duplicate_migration_check)
             logger.info(f"Asset Edit Complete, Asset ID {asset_id}")
             if asset_id:
-                Utility.clear_screen()
-                print(f"==[ EDIT ASSET ]{'=' * (self.terminal_width - 16)}\n")
-                print(f"Asset ID {asset_id} has been updated in the database.")
+                self.clear_screen()
+                print(f"==[ EDIT ASSET ]{'=' * (self._terminal_width - 16)}\n")
+                print(f"Asset ID {asset_id} has been updated in the database.\n")
                 input("Press enter to continue.")
-                Utility.clear_screen()
+                self.clear_screen()
                 continue
-            print("An error has occured, please check the database.")
+            else:
+                self.clear_screen()
+                continue
     
     
     def asset_new(self):
         initial_setup = {}
         
-        Utility.clear_screen()
+        self.clear_screen()
         logger.info("Asset New Start")
         while True:
-            print(f"==[ NEW ASSET ]{'=' * (self.terminal_width - 15)}")
-            initial_serial = MenuFunction(self, self.main_menu, "Enter full serial: ").menu_input
+            print(f"==[ NEW ASSET ]{'=' * (self._terminal_width - 15)}")
+            initial_serial = self.menu_input("Enter full serial: ", ["B", "X"])
             logger.info(f"Asset New Initial Serial: {initial_serial}")
-            if initial_serial is None:
-                continue
+            if initial_serial.upper() == "B":
+                break
             else:
                 asset_exists = self.asset_search("edit", "none", ["Serial", "serial"], initial_serial, False, True)
             
             if asset_exists:
                 logger.error(f"Asset Exists: {asset_exists}")
-                Utility.clear_screen()
-                print(f"==[ NEW ASSET ]{'=' * (self.terminal_width - 15)}\n")
+                self.clear_screen()
+                print(f"==[ NEW ASSET ]{'=' * (self._terminal_width - 15)}\n")
                 print("This asset already exists, please go to the edit screen.")
                 input("Press enter to continue.")
-                Utility.clear_screen()
+                self.clear_screen()
                 continue
             else:
                 initial_type = self._edit_fixed_list("device_type")
@@ -265,16 +371,47 @@ class MenuScreens:
                 new_asset = maria.new_object(initial_setup)
                 logger.info(f"Asset New Asset: {vars(new_asset)}")
                 new_id = self._edit_screen(new_asset, False)
-                logger.info(f"Asset New ID: {new_id}")
-                Utility.clear_screen()
-                print(f"==[ NEW ASSET ]{'=' * (self.terminal_width - 15)}\n")
-                print("New asset has been saved to the database.")
-                print("Please take note of the new Asset ID below.\n")
-                print(f"Asset ID: {new_id}\n")
-                input("Press enter to continue.")
-                Utility.clear_screen()
-                continue
+                
+                if not new_id:
+                    logger.info("New Asset Cancelled")
+                    self.clear_screen()
+                    continue
+                else:
+                    logger.info(f"Asset New ID: {new_id}")
+                    self.clear_screen()
+                    print(f"==[ NEW ASSET ]{'=' * (self._terminal_width - 15)}\n")
+                    print("New asset has been saved to the database.")
+                    print("Please take note of the new Asset ID below.\n")
+                    print(f"Asset ID: {new_id}\n")
+                    print("A new asset report has (probably) been sent to the IT printer.")
+                    print("Please make sure to give this to Ben.\n")
+                    input("Press enter to continue.")
+                    self.clear_screen()
+                    self.output_to_printer(new_asset, ["New Asset Added", f"Asset Number:  {new_id}"], ["asset_number"])
+                    continue
     
+    
+    def output_to_printer(self, print_object: object, extra: list = [], exclude: list = []):
+        object_dictionary = vars(print_object)
+        print_file = f"print_file_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        exclude_list = exclude + ["table", "column", "is_verified"]
+        
+        if hasattr(print_object, "asset_number") and print_object.asset_number:
+            print_file += f"_{print_object.asset_number}"
+        
+        with open(f"{print_file}.txt", "w") as file:
+            for item in extra:
+                file.write(f"{item}\r\n")
+            file.write("\r\n")
+            for key, value in object_dictionary.items():
+                if key not in exclude_list:
+                    file.write(f"{key.capitalize()}:  {value}\r\n")
+        
+        if os.name == "posix":
+            os.system(f"cat {print_file}.txt |netcat -w 1 90.8.3.14 9100")
+        else:
+            os.startfile(f"{print_file}.txt", "print")
+            
     
     def _process_duplicates_migrations(self, asset_object: object):
         migrated = False
@@ -342,10 +479,10 @@ class MenuScreens:
             
             # Clear the screen and show the options of which asset to
             #   keep active.
-            Utility.clear_screen()
+            self.clear_screen()
             while True:
                 select_duplicate = None
-                print(f"==[ Mark Duplicates ]{'=' * (self.terminal_width - 21)}")
+                print(f"==[ Mark Duplicates ]{'=' * (self._terminal_width - 21)}")
                 if len(output_list) == 1:
                     select_duplicate = "1"
                 else:
@@ -355,18 +492,18 @@ class MenuScreens:
                         option_number += 1
                         print(f"Option {option_number})\n")
                         entry.output(False, device_fields)
-                        print("-" * self.terminal_width)
+                        print("-" * self._terminal_width)
                 
                 # Get user input on which asset to keep.
                 if not select_duplicate:
-                    select_duplicate = MenuFunction(self, self.asset_edit, "Select duplicate to keep: ", [str(i) for i in range(1, len(output_list) + 1)]).menu_input
-                with logger.contextualize(select_duplicate = select_duplicate, migrated = migrated, migrated_count = len(migrated_ouput)):
-                    logger.info(f"Mig/Dup Select Duplicate: {vars(search_duplicates[int(select_duplicate) - 1])}")
-                if select_duplicate is None:
-                    continue
-                
+                    select_duplicate = self.menu_input("Select duplicate to keep: ",[str(i) for i in range(1, len(output_list) + 1)] + ["B","M","X"], True)
+                if select_duplicate.upper() == "B":
+                    self.clear_screen()
+                    break
                 # Set any other duplicates to be marked as duplicate.
                 else:
+                    with logger.contextualize(select_duplicate = select_duplicate, migrated = migrated, migrated_count = len(migrated_ouput)):
+                        logger.info(f"Mig/Dup Select Duplicate: {vars(search_duplicates[int(select_duplicate) - 1])}")
                     for duplicate in search_duplicates:
                         if duplicate != output_list[int(select_duplicate) - 1]:
                             duplicate_list.append(duplicate)
@@ -382,17 +519,17 @@ class MenuScreens:
                         logger.error(f"Mig/Dup New Table Duplicate: {asset.asset_number}, {asset.serial}")
                         if not duplicate_message:
                             duplicate_message = True
-                            Utility.clear_screen()
-                            print(f"==[ Mark Duplicates ]{'=' * (self.terminal_width - 21)}")
-                            print(f"{'!' * self.terminal_width}")
+                            self.clear_screen()
+                            print(f"==[ Mark Duplicates ]{'=' * (self._terminal_width - 21)}")
+                            print(f"{'!' * self._terminal_width}")
                             print("Please send a message to the IT department with the following information.")
                             print("Copy / Paste if possible.\n\n")
                             print("Duplicate(s) detected in the new IT Assets table:\n")
                         print(f"Asset Number: {asset.asset_number}")
                         print(f"Serial Number: {asset.serial}")
-                        print("-" * self.terminal_width)
+                        print("-" * self._terminal_width)
                 if duplicate_message:
-                    print(f"\n{'!' * self.terminal_width}")
+                    print(f"\n{'!' * self._terminal_width}")
                     input("Press enter to continue.")
                 
                 # If selected asset is from old table, send it to be migrated.
@@ -505,7 +642,7 @@ class MenuScreens:
                     new_setup[key] = None
         
         if unconvertable_datatype:
-            Utility.clear_screen()
+            self.clear_screen()
             print("The following information will be lost, please take note:\n")
             for field, entry in unconvertable_datatype.items():
                 print(f"{field.capitalize()}: {entry}")
@@ -519,15 +656,18 @@ class MenuScreens:
             logger.info(f"Old Asset {old_asset.Asset} Migrated: {old_asset.is_migrated}")
             maria.save_object(old_asset)
             
-            Utility.clear_screen()
-            print(f"==[ MIGRATING ASSET ]{'=' * (self.terminal_width - 21)}\n")
+            self.clear_screen()
+            print(f"==[ MIGRATING ASSET ]{'=' * (self._terminal_width - 21)}\n")
             print(f"Asset {old_asset.Asset} has been migrated from {old_asset.table}.")
             print("Please take note of the new Asset ID below.\n")
             print(f"Asset ID: {asset_id}\n")
             input("Press enter to continue.")
-            Utility.clear_screen()
+            self.clear_screen()
         else:
-            input("Please check database for possible errors.")
+            self.clear_screen()
+            print(f"Migration of asset {old_asset.Asset} has been cancelled.\n")
+            input("Press enter to continue.")
+            
         self.asset_edit()
     
     
@@ -579,7 +719,7 @@ class MenuScreens:
             list_fields = ("asset_reference", "notes")
             option_number = 0
             
-            Utility.clear_screen()
+            self.clear_screen()
             # with logger.contextualize(short = short):
             #     logger.info(f"Edit Screen Start")
             if not hasattr(asset, "serial") or not getattr(asset, "serial", ""):
@@ -587,19 +727,19 @@ class MenuScreens:
                 locked_fields.remove("serial")
                 required_fields.append("serial")
             
+            if hasattr(asset, "ip_address"):
+                required_fields.append("ip_address")
+            
             if asset.column == "new":
-                print(f"==[ NEW ASSET ]{'=' * (self.terminal_width - 15)}\n")
+                print(f"==[ NEW ASSET ]{'=' * (self._terminal_width - 15)}\n")
                 ignore_keys.append("asset_number")
                 required_fields.remove("device_type")
                 locked_fields.append("device_type")
-                back_command = self.asset_new
             elif asset.column == "migrate":
-                print(f"==[ MIGRATING ASSET ]{'=' * (self.terminal_width - 21)}\n")
+                print(f"==[ MIGRATING ASSET ]{'=' * (self._terminal_width - 21)}\n")
                 ignore_keys.append("asset_number")
-                back_command = self.asset_new
             else:
-                print(f"==[ EDIT ASSET ]{'=' * (self.terminal_width - 16)}\n")
-                back_command = self.asset_edit
+                print(f"==[ EDIT ASSET ]{'=' * (self._terminal_width - 16)}\n")
                 
             output_dictionary = vars(asset)
             device_fields = self._set_device_fields(asset)
@@ -630,12 +770,14 @@ class MenuScreens:
                 break
             
             print("S: Save changes to database.")
-            print("WARNING: The below commands will discard any changes!")
-            select_field = MenuFunction(self, back_command, "Enter command or select field to edit: ", [str(i) for i in range(1, len(fields) + 1)] + ["S"], ["back", "cancel", "exit"]).menu_input
+            select_field = self.menu_input("Enter command or select field to edit: ", [str(i) for i in range(1, len(fields) + 1)] + ["B", "S"], True)
             logger.info(f"Edit Screen Select Field: {select_field}")
-            if select_field is None:
-                continue
-            elif select_field.upper().strip() == "S":
+            if select_field.upper() == "B":
+                if self._confirm_exit():
+                    break
+                else:
+                    continue
+            elif select_field.upper() == "S":
                 saved_asset = self._edit_save(asset, required_fields)
                 if saved_asset:
                     return saved_asset
@@ -657,6 +799,23 @@ class MenuScreens:
                     self._edit_fixed_list(fields[int(select_field) - 1], asset)
                 else:
                     self._edit_field(asset, fields[int(select_field) - 1])
+    
+    
+    def _confirm_exit(self):
+        self.clear_screen()
+        print("All unsaved changes will be lost.")
+        print("Are you sure you want to exit?\n")
+        
+        print("1)  Yes")
+        print("2)  No")
+        
+        options = ["1", "YES", "Y", "2", "NO", "N"]
+        select_option = self.menu_input("\nEnter selection: ", options, True)
+        
+        if select_option.upper() in ["1", "YES", "Y"]:
+            return True
+        else:
+            return False
 
 
     def _edit_date_field(self, editing_asset: object, attribute):
@@ -673,12 +832,10 @@ class MenuScreens:
         
         while True:
             print("Warning: Current date will be overwritten")
-            new_date = MenuFunction(self, self._edit_screen, "Enter new date (MM/DD/YYYY): ", ["n/a"], ["n/a"], editing_asset).menu_input
+            new_date = self.menu_input("Enter new date (MM/DD/YYYY): ")
             with logger.contextualize(attribute=attribute, sql_date = sql_date):
                 logger.info(f"Edit Date New Date: {new_date}")
-            if new_date is None:
-                continue
-            elif new_date.upper() == "B":
+            if new_date.upper() == "B":
                 logger.info("Edit Date Back Command")
                 break
             else:
@@ -736,10 +893,7 @@ class MenuScreens:
             else:
                 self._output_list_entries(editing_asset, attribute, entries_list)
             while True:
-                option_list = [str(i) for i in range(1, len(entries_list) + 2)]
-                option_list.append("B")
-                print("B: Go back to previous screen.\n")
-                select_entry = MenuFunction(self, self._edit_screen, "Enter command or select entry to add or edit: ", option_list, ["n/a"], editing_asset).menu_input
+                select_entry = self.menu_input("Enter command or select entry to add or edit: ", [str(i) for i in range(1, len(entries_list) + 2)] + ["B"], True)
                 with logger.contextualize(attribute = attribute):
                     logger.info(f"Edit List Select Entry: {select_entry}")
                 if select_entry.upper() == "B":
@@ -758,21 +912,25 @@ class MenuScreens:
                     print(f"Current entry: {entries_list[int(select_entry) - 1].replace('_', ' ')}\n")
                     print("Warning: Current entry will be overwritten")
                     
-                prompt = f"Enter command or new {attribute[:-1].replace('_', ' ') if attribute.endswith('s') else attribute.replace('_', ' ')}: "
-                edit_entry = MenuFunction(self, "n/a", prompt, ["n/a"], ["n/a"]).menu_input
+                list_prompt = f"Enter command or new {attribute[:-1].replace('_', ' ') if attribute.endswith('s') else attribute.replace('_', ' ')}: "
+                edit_entry = self.menu_input(list_prompt)
                 with logger.contextualize(current_entry = entries_list[int(select_entry) - 1] if len(entries_list) > int(select_entry) - 1 else "Empty"):
                     logger.info(f"Edit Notes Edit Entry: {edit_entry}")
-                if edit_entry.upper().strip() == "B":
+                if edit_entry.upper() == "B":
                     logger.info("Edit List Edit Entry Back")
                     break
-                elif edit_entry.upper().strip() == "D":
+                elif edit_entry.upper() == "D":
                     logger.info("Edit List Edit Entry Delete")
                     if len(entries_list) == 0:
                         logger.info("Edit List Nothing To Delete")
                         break
                     else:
-                        entries_list.pop(int(select_entry) - 1)
-                        logger.info(f"Edit List Delete {(int(select_entry))}")
+                        try:
+                            entries_list.pop(int(select_entry) - 1)
+                            logger.info(f"Edit List Delete {(int(select_entry))}")
+                        except IndexError:
+                            logger.info(f"Delete Empty Index {(int(select_entry))}")
+                            break
                 else:
                     if int(select_entry) == (len(entries_list) + 1):
                         if len(" --- ".join(entries_list)) + len(edit_entry) >= 225:
@@ -800,7 +958,7 @@ class MenuScreens:
             print(f"{option_number})  {entry}")
         option_number += 1
         print(f"{option_number})  <Add new entry>")
-        print("-" * self.terminal_width)
+        print("-" * self._terminal_width)
     
     
     def _edit_fixed_list(self, asset_field: str, editing_asset: object = None):
@@ -811,18 +969,20 @@ class MenuScreens:
             if editing_asset:
                 self._edit_screen(editing_asset, True)
             else:
-                Utility.clear_screen()
+                self.clear_screen()
                 if asset_field == "device_type":
-                    print(f"==[ DEVICE TYPE ]{'=' * (self.terminal_width - 17)}\n")
+                    print(f"==[ DEVICE TYPE ]{'=' * (self._terminal_width - 17)}\n")
                 else:
-                    print(f"==[ DEVICE STATUS ]{'=' * (self.terminal_width - 19)}\n")
+                    print(f"==[ DEVICE STATUS ]{'=' * (self._terminal_width - 19)}\n")
             
             if asset_field in restricted:
                 option_prompt = f"Select {asset_field.replace('_', ' ')}: "
                 option_list_set = None
+                restrict_selection = True
             else:
                 option_prompt = f"Enter or select {asset_field.replace('_', ' ')}: "
                 option_list_set = "n/a"
+                restrict_selection = False
             
             if editing_asset:
                 if getattr(editing_asset, asset_field) is not None:
@@ -837,16 +997,14 @@ class MenuScreens:
             option_list.append("B")
             if not option_list_set:
                 option_list_set = option_list
-            print("-" * self.terminal_width)
-            print("B: Go back to previous screen.\n")
-            
-            select_option = MenuFunction(self, "n/a", option_prompt, option_list_set, ["n/a"]).menu_input
+            print("-" * self._terminal_width)
+            select_option = self.menu_input(option_prompt, option_list, restrict_selection)
             with logger.contextualize(asset_field = asset_field):
                 logger.info(f"Edit Fixed List Select Option: {select_option}")
                 
-            if select_option.upper().strip() == "B":
+            if select_option.upper() == "B":
                 logger.info("Edit Fixed List Back")
-                Utility.clear_screen()
+                self.clear_screen()
                 break
             elif editing_asset and select_option not in option_list and asset_field not in restricted:
                 setattr(editing_asset, asset_field, select_option)
@@ -881,7 +1039,7 @@ class MenuScreens:
         
         while True:
             print("Warning: Current entry will be overwritten")
-            new_number = MenuFunction(self, self._edit_screen, f"Enter new {attribute.replace('_', ' ')}: ", ["n/a"], ["n/a"], editing_asset).menu_input
+            new_number = self.menu_input(f"Enter new {attribute.replace('_', ' ')}: ")
             with logger.contextualize(attribute = attribute,sql_number = sql_number, data_type = data_type):
                 logger.info(f"Edit Number: {new_number}")
             if new_number.upper() == "B":
@@ -892,7 +1050,6 @@ class MenuScreens:
             except ValueError as error:
                 logger.error(f"Edit Number Error: {error}")
                 print("Invalid input, please try again.\n")
-                
                 continue
             if data_type is float:
                 new_number = float(format(new_number, ".2f"))
@@ -914,12 +1071,10 @@ class MenuScreens:
         
         while True:
             print("Warning: Current entry will be overwritten")
-            new_data = MenuFunction(self, self._edit_screen, f"Enter new {attribute.replace('_', ' ')}: ", ["n/a"], ["n/a"], editing_asset).menu_input
+            new_data = self.menu_input(f"Enter new {attribute.replace('_', ' ')}: ")
             with logger.contextualize(attribute = attribute, sql_data = sql_data):
                 logger.info(f"Edit Field New Data: {new_data}")
-            if new_data is None:
-                continue
-            elif new_data.upper() == "B":
+            if new_data.upper() == "B":
                 logger.info("Edit Field Back Command.")
                 break
             elif len(new_data) >= 255:
@@ -968,14 +1123,14 @@ class MenuScreens:
     
     
     def exit_program(self):
-        Utility.clear_screen()
+        self.clear_screen()
         maria.close_connection()
         print("\nGoodbye!\n")
         logger.info("-----Ending session.-----")
         exit()
     
     
-    def menu_input(self, prompt: str, options_list: list = None):
+    def menu_input(self, prompt: str, options_list: list = None, restricted = False):
         command_dictionary = {
             "C": "Clear the screen.",
             "B": "Go back to previous screen.",
@@ -984,16 +1139,17 @@ class MenuScreens:
         }
         command_options = []
         
-        for option in options_list:
-            if option in command_dictionary.keys():
-                command_options.append(option)
+        if options_list:
+            for option in options_list:
+                if option in command_dictionary.keys():
+                    command_options.append(option)
         
         if command_options:
             print("Command Options:")
             current_line = ""
             for command in command_options:
                 command_string = f"{command}: {command_dictionary[command]}  "
-                if len(current_line) + len(command_string) <= self.terminal_width:
+                if len(current_line) + len(command_string) <= self._terminal_width:
                     current_line += command_string
                 else:
                     print(current_line)
@@ -1002,107 +1158,6 @@ class MenuScreens:
         
         while True:
             user_input = input(prompt).strip()
-            if options_list and user_input not in options_list:
-                print("Invalid input, please try again.")
-                continue
-            elif options_list and user_input in options_list:
-                if user_input.upper() == "C":
-                    Utility.clear_screen()
-                    break
-                elif user_input.upper() == "M":
-                    self.main_menu()
-                elif user_input.upper() == "X":
-                    self.exit_program()
-                else:
-                    return user_input
-            else:
-                return user_input
-                
-
-
-
-
-class MenuFunction:
-    """Provides menu and input functionality."""
-    
-    def __init__(
-        self: object,
-        calling_class,
-        back_to: str = "n/a",
-        prompt: str = "",
-        menu_options: list = ["n/a"],
-        command_options: list = ["all"],
-        pass_object: object = None,
-        search_term: str = None
-    ):
-        """Instatiates menu input class."""
-        
-        # Class variable(s) used to indicate where "cancel" (C) and "back" (B) should go.
-        self._calling_class = calling_class
-        self._back_to = back_to
-        self._pass_object = pass_object
-        
-        # Class variable(s) used to display the input prompt.
-        self._prompt = prompt
-        
-        # Class variable(s) used for the calling menu.
-        self._menu_options = menu_options
-        
-        # Class variable for user input or selection
-        self.menu_input = search_term
-        
-        # Class variable(s) used to display the list of commands (i.e. "back").
-        self._command_options = [(command.lower()) for command in command_options]
-        self._command_list = []
-        self._command_print_dict = {
-            "C": ": Clear the screen.",
-            "B": ": Go back to previous screen.",
-            "M": ": Go back to main menu.",
-            "X": ": Exit the program.",
-        }
-        
-        # Input methods not needed if search term is defined by the caller.
-        if not search_term:
-            # Method to list available commands before user input.
-            self._list_commands()
-            
-            # Method to ask user for input.
-            self._get_user_input()
-
-
-    def _list_commands(self):
-        """List commands that can be used from input."""
-        current_line = ""
-        terminal_width = os.get_terminal_size().columns
-        
-        if "all" in self._command_options:
-            self._command_list.extend(["C", "B", "M", "X"])
-        elif ("n/a" in self._command_options):
-            return
-        else:
-            if "clear" in self._command_options:
-                self._command_list.append("C")
-            if "back" in self._command_options:
-                self._command_list.append("B")
-            if "cancel" in self._command_options:
-                self._command_list.append("M")
-            if "exit" in self._command_options:
-                self._command_list.append("X")
-        
-        print("Command Options:")
-        for command in self._command_list:
-            command_string = f"{command}{self._command_print_dict[command]}  "
-            if len(current_line) + len(command_string) <= terminal_width:
-                current_line += command_string
-            else:
-                print(current_line)
-                current_line = command_string
-        print(f"{current_line}\n")
-    
-    
-    def _get_user_input(self):
-        while True:
-            user_input = input(self._prompt).strip()
             
             if os.name == "posix":
                 import termios
@@ -1112,32 +1167,24 @@ class MenuFunction:
                 while msvcrt.kbhit():
                     msvcrt.getch()
             
-            if user_input.upper() in self._command_list:
+            if not user_input or (restricted and user_input.upper() not in options_list):
+                print("Invalid input, please try again.")
+                continue
+            elif options_list and user_input.upper() in options_list:
                 if user_input.upper() == "C":
-                    Utility.clear_screen()
+                    self.clear_screen()
                     break
-                elif user_input.upper() == "B":
-                    if self._pass_object:
-                        self._back_to(self._pass_object)
-                    else:
-                        self._back_to()
                 elif user_input.upper() == "M":
-                    self._calling_class.main_menu()
+                    self.main_menu()
                 elif user_input.upper() == "X":
-                    self._calling_class.exit_program()
-            elif not user_input or (user_input.upper() not in self._menu_options and "n/a" not in self._menu_options):
-                print("Invalid input, please try again.\n")
+                    self.exit_program()
+                else:
+                    return user_input
             else:
-                self.menu_input = user_input
-                break
-
-
-
-
-class Utility:
-    """Provides functions for use by menus."""
+                return user_input
+            
     
-    def clear_screen():
+    def clear_screen(self):
         if os.name == "posix":
             os.system("clear")
         else:
@@ -1157,11 +1204,11 @@ if __name__ == "__main__":
     with logger.catch():
         maria = database.DatabaseManager()
         if maria.connection:
-            start = MenuScreens()
+            start = CommandClass()
         else:
             logger.critical(maria.fail_error)
             input("Critical Error!: Press enter to terminate.")
             
     # This section being uncommented moves crashes to terminal
     # maria = database.DatabaseManager()
-    # start = MenuScreens()
+    # start = CommandClass()

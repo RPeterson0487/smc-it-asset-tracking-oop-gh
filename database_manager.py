@@ -17,7 +17,7 @@ class DatabaseManager:
         
         # Login variables
         self._database_host = dbconfig.mariadb_login["host"]
-        self._database_name = dbconfig.mariadb_login["database"]
+        self.database_name = dbconfig.mariadb_login["database"]
         self._username = dbconfig.mariadb_login["username"]
         self._password = dbconfig.mariadb_login["password"]
 
@@ -34,7 +34,7 @@ class DatabaseManager:
                 host=self._database_host,
                 user=self._username,
                 password=self._password,
-                database=self._database_name
+                database=self.database_name
             )
 
             self._cursor = self.connection.cursor(dictionary = True)

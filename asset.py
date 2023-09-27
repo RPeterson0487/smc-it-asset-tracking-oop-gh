@@ -28,6 +28,7 @@ class Asset:
                     "Fork Truck": self.fork_truck_reference,
                     "Device Name": self.device_name,
                     "IP Address": self.ip_address,
+                    "Status": self.status,
                     "Notes": self.notes,
                 }
                 for field in output_dictionary:
@@ -66,7 +67,10 @@ class Asset:
                 if (not print_fields or key in print_fields) and key not in ("is_duplicate", "is_migrated", "is_verified", "table", "column"):
                     print(f"{key}: {value}")
         if not current:
-            print("Migration Status: This device has not yet been migrated to the new tracking table.")
+            if self.is_migrated:
+                print("Migration Status: This device has been migrated and cannot be edited.")
+            else:
+                print("Migration Status: This device has not yet been migrated to the new tracking table.")
     
     
     def __eq__(self, other):
