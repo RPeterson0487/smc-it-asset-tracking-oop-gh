@@ -131,7 +131,7 @@ class CommandClass:
             with logger.contextualize(search_prompt = search_prompt):
                 logger.info(f"Asset Search Term: {asset_search_term}")
                 
-            if asset_search_term[0:2].upper() == "A-" or (asset_search_term[0] == "0" and "serial" not in search_fields):
+            if asset_search_term[0:2].upper() == "A-" or (asset_search_term[0] == "0" and len(asset_search_term) == 6):
                 search_fields.extend(["Asset", "asset_number"])
                 use_like = False
                 asset_search_term = asset_search_term[2:].lstrip("0")
@@ -727,9 +727,6 @@ class CommandClass:
                 locked_fields.remove("serial")
                 required_fields.append("serial")
             
-            if hasattr(asset, "ip_address"):
-                required_fields.append("ip_address")
-            
             if asset.column == "new":
                 print(f"==[ NEW ASSET ]{'=' * (self._terminal_width - 15)}\n")
                 ignore_keys.append("asset_number")
@@ -743,6 +740,9 @@ class CommandClass:
                 
             output_dictionary = vars(asset)
             device_fields = self._set_device_fields(asset)
+            
+            if "ip_address" in device_fields:
+                required_fields.append("ip_address")
             
             items = list(output_dictionary.items())
             for _, (key, value) in enumerate(items):
