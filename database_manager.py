@@ -36,8 +36,9 @@ class DatabaseManager:
                 password=self._password,
                 database=self.database_name
             )
-
             self._cursor = self.connection.cursor(dictionary = True)
+            self._cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            
         except Exception as error:
             self.fail_error = error
             print(f"\nError connecting to database:\n{error}\n")

@@ -7,6 +7,7 @@ from typing import Literal, Union
 import os
 import re
 import sys
+import subprocess
 
 # Third party imports.
 
@@ -26,9 +27,12 @@ class CommandClass:
         self._menu_options = {
             "1": self.asset_search,
             "2": self.asset_full_search,
-            "3": self.asset_edit,
-            "4": self.asset_new,
-            "5": self.asset_print,
+            "3": self.asset_filter_device,
+            "4": self.asset_print,
+            "5": self.label_print,
+            "6": self.asset_edit,
+            "7": self.asset_group_edit,
+            "8": self.asset_new,
             "0": self.exit_program,
         }
         
@@ -50,9 +54,15 @@ class CommandClass:
             print(f"==[ MAIN MENU ]{'=' * (self._terminal_width - 15)}\n")
             print('1)  Basic output "label" search')
             print('2)  Extended output "full" search')
-            print("3)  Edit existing asset")
-            print("4)  Create new asset")
-            print("5)  Print asset report")
+            print("3)  Filter device type")
+            print()
+            print("4)  Print asset report")
+            print("5)  Print asset label")
+            print()
+            print("6)  Edit existing asset")
+            print("7)  Change asset group status")
+            print("8)  Create new asset")
+            print()
             print("0)  Exit program")
             print("-" * self._terminal_width)
             
@@ -72,7 +82,8 @@ class CommandClass:
         search_term: str = None,
         use_like: bool = True,
         full_return = False,
-        second_search = False
+        second_search = False,
+        search_device: str = None,
     ):
         option_number = 0
         prefix_list = ["A- Asset Number.", "R- Asset Reference.", "S- Serial.", "H- Hidden (all)", "D- Destroyed/Retired"]
@@ -89,6 +100,7 @@ class CommandClass:
             migrated_count = 0
             retired_count = 0
             hidden_list = []
+            filter_list = []
             retired_list = []
             result_list = []
             
@@ -131,23 +143,24 @@ class CommandClass:
             with logger.contextualize(search_prompt = search_prompt):
                 logger.info(f"Asset Search Term: {asset_search_term}")
                 
-            if asset_search_term[0:2].upper() == "A-" or (asset_search_term[0] == "0" and len(asset_search_term) == 6):
-                search_fields.extend(["Asset", "asset_number"])
-                use_like = False
-                asset_search_term = asset_search_term[2:].lstrip("0")
-            elif asset_search_term[0:2].upper() == "R-":
-                search_fields.extend(["asset_reference"])
-                asset_search_term = asset_search_term[2:]
-            elif asset_search_term[0:2].upper() == "S-":
-                search_fields.extend(["serial", "Serial"])
-                use_like = False
-                asset_search_term = asset_search_term[2:]
-            elif asset_search_term[0:2].upper() == "H-":
-                hidden_results = "all"
-                asset_search_term = asset_search_term[2:]
-            elif asset_search_term[0:2].upper() == "D-":
-                hidden_results = "limited"
-                asset_search_term = asset_search_term[2:]
+            while asset_search_term[0:2].upper() in ["A-", "R-", "S-", "H-", "D-"] or (asset_search_term[0] == "0" and len(asset_search_term) == 6):
+                if asset_search_term[0:2].upper() == "A-" or (asset_search_term[0] == "0" and len(asset_search_term) == 6):
+                    search_fields.extend(["Asset", "asset_number"])
+                    use_like = False
+                    asset_search_term = asset_search_term[2:].lstrip("0")
+                elif asset_search_term[0:2].upper() == "R-":
+                    search_fields.extend(["asset_reference", "Asset"])
+                    asset_search_term = asset_search_term[2:]
+                elif asset_search_term[0:2].upper() == "S-":
+                    search_fields.extend(["serial", "Serial"])
+                    use_like = False
+                    asset_search_term = asset_search_term[2:]
+                elif asset_search_term[0:2].upper() == "H-":
+                    hidden_results = "all"
+                    asset_search_term = asset_search_term[2:]
+                elif asset_search_term[0:2].upper() == "D-":
+                    hidden_results = "limited"
+                    asset_search_term = asset_search_term[2:]
                 
             
             if search_fields and use_like:
@@ -188,6 +201,12 @@ class CommandClass:
                 output_list = retired_list
             else:
                 output_list = result_list
+            
+            if search_device:
+                for asset in output_list:
+                    if hasattr(asset, "device_type") and asset.device_type == search_device:
+                        filter_list.append(asset)
+                output_list = filter_list
             
             # Output search results.
             if output != "none":
@@ -231,14 +250,26 @@ class CommandClass:
     
     
     def asset_full_search(self):
-        self.asset_search(output="full")
+        self.asset_search(output = "full")
     
     
-    def asset_print(self):
+    def asset_filter_device(self):
         self.clear_screen()
-        logger.info("Asset Print Start")
         while True:
-            print(f"==[ PRINT ASSET REPORT ]{'=' * (self._terminal_width - 24)}")
+            set_type = self._edit_fixed_list("device_type")
+            if not set_type:
+                break
+            self.asset_search(search_device = set_type)
+    
+    
+    def asset_print(self, mode: Literal["printer", "sato"] = "printer"):
+        self.clear_screen()
+        logger.info(f"Asset Print Start in {mode} mode.")
+        while True:
+            if mode == "printer":
+                print(f"==[ PRINT ASSET REPORT ]{'=' * (self._terminal_width - 24)}")
+            elif mode == "sato":
+                print(f"==[ PRINT ASSET LABEL ]{'=' * (self._terminal_width - 23)}")
             search_asset = self.asset_search(type_search="edit", search_fields=[], output="full")
             if not search_asset:
                 logger.info("Asset Print Search: No results found.")
@@ -248,24 +279,92 @@ class CommandClass:
             elif len(search_asset) == 1:
                 select_asset = "1"
             else:
-                select_asset = self.menu_input("Select asset report to print: ", [str(i) for i in range(1, len(search_asset) + 1)] + ["B", "M", "X"], True)
+                if mode == "printer":
+                    message_prompt = "Select asset report to print: "
+                elif mode == "sato":
+                    message_prompt = "Select asset label to print: "
+                select_asset = self.menu_input(message_prompt, [str(i) for i in range(1, len(search_asset) + 1)] + ["B", "M", "X"], True)
             if select_asset.upper() == "B":
                 self.clear_screen()
                 continue
             else:
-                header = ["Asset Report"]
+                if mode == "printer":
+                    header = ["Asset Report"]
+                elif mode == "sato":
+                    header = ["Asset Label"]
                 if hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 0:
                     header.append("Migration Status: This device has not yet been migrated to the new tracking table.")
                 elif hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 1:
                     header.append("Migration Status: This device has been migrated and cannot be edited.")
-                try:
-                    self.output_to_printer(search_asset[int(select_asset) - 1], header)
-                except:
-                    print("\n\n!!! An error has occurred, please try again later. !!!\n")
-                    input("Press enter to continue.")
+                if mode == "printer":
+                    try:
+                        self.output_to_printer(search_asset[int(select_asset) - 1], header)
+                    except:
+                        print("\n\n!!! An error has occurred, please try again later. !!!\n")
+                        input("Press enter to continue.")
+                        self.clear_screen()
+                        continue
+                    print("\nAsset report sent to the printer.\n")
+                elif mode == "sato":
+                    self.output_asset_tag(search_asset[int(select_asset) - 1])
+    
+    
+    def label_print(self):
+        self.asset_print("sato")
+    
+    
+    def asset_group_edit(self):
+        group_edited = {}
+        
+        self.clear_screen()
+        while True:
+            set_status = self._edit_fixed_list("status")
+            if not set_status:
+                break
+            self.clear_screen()
+            while True:
+                print(f"==[ CHANGE ASSET GROUP ]{'=' * (self._terminal_width - 24)}")
+                if group_edited:
+                    for asset, status in group_edited.items():
+                        print(f"Asset {asset} status set to {status}.")
+                    print("-" * self._terminal_width)
+                print()
+                
+                search_asset = self.asset_search(type_search = "edit", search_fields = [])
+                if not search_asset:
                     self.clear_screen()
+                    print("No results found.\n")
                     continue
-                print("\nAsset report sent to the printer\n")
+                elif search_asset == "go_back":
+                    self.clear_screen()
+                    break
+                elif len(search_asset) == 1:
+                    select_asset = "1"
+                else:
+                    select_asset = self.menu_input("Select asset to change status: ", [str(i) for i in range(1, len(search_asset) + 1)] + ["B", "M", "X"], True)
+                    if select_asset.upper() == "B":
+                        self.clear_screen()
+                        continue
+                if (hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 0) or (hasattr(search_asset[int(select_asset) - 1], "is_duplicate") and search_asset[int(select_asset) - 1].is_duplicate == 1):
+                    self.clear_screen()
+                    print("This asset will need to be edited through the edit screen.\n")
+                    continue
+                else:
+                    setattr(search_asset[int(select_asset) - 1], "status", set_status)
+                    save = maria.save_object(search_asset[int(select_asset) - 1])
+                    if not save and hasattr(search_asset[int(select_asset) - 1], "asset_number") and search_asset[int(select_asset) - 1].asset_number in group_edited.keys():
+                        self.clear_screen()
+                        print(f"Asset already set to {set_status}\n")
+                        continue
+                    elif not save and hasattr(search_asset[int(select_asset) - 1], "status") and search_asset[int(select_asset) - 1].status == set_status:
+                        self.clear_screen()
+                        print(f"Status is already showing as {set_status}, please check record or continue scanning.\n")
+                    elif not save:
+                        self.clear_screen()
+                        print("Nothing has been changed, please check record or continue scanning.\n")
+                    else:
+                        group_edited[save] = set_status
+                        self.clear_screen()
 
 
     def asset_edit(self):
@@ -281,12 +380,12 @@ class CommandClass:
                 break
             elif len(search_asset) == 1:
                 if hasattr(search_asset[0], "is_migrated") and search_asset[0].is_migrated == 1:
-                    print("This asset has been migrated.  Please find the new asset and edit it.\n")
+                    print("This asset has been migrated. Please find the new asset and edit it.\n")
                     input("Press enter to continue.\n")
                     self.clear_screen()
                     continue
                 elif hasattr(search_asset[0], "is_duplicate") and search_asset[0].is_duplicate == 1:
-                    print("This asset has been marked as a duplicate of another.  Please find that device and edit it.\n")
+                    print("This asset has been marked as a duplicate of another. Please find that device and edit it.\n")
                     input("Press enter to continue.\n")
                     self.clear_screen()
                     continue
@@ -296,10 +395,10 @@ class CommandClass:
                 while True:
                     select_asset = self.menu_input("Select asset to edit: ", [str(i) for i in range(1, len(search_asset) + 1)] + ["B", "M", "X"], True)
                     if select_asset.upper() != "B" and hasattr(search_asset[int(select_asset) - 1], "is_migrated") and search_asset[int(select_asset) - 1].is_migrated == 1:
-                        print("\nThis asset has been migrated.  Please find the new asset and edit it.\n")
+                        print("\nThis asset has been migrated. Please find the new asset and edit it.\n")
                         continue
                     elif select_asset.upper() != "B" and hasattr(search_asset[int(select_asset) - 1], "is_duplicate") and search_asset[int(select_asset) - 1].is_duplicate == 1:
-                        print("\nThis asset has been marked as a duplicate of another.  Please find that device and edit it.\n")
+                        print("\nThis asset has been marked as a duplicate of another. Please find that device and edit it.\n")
                         continue
                     if select_asset.upper() != "B":
                         with logger.contextualize(select_asset = select_asset):
@@ -385,9 +484,12 @@ class CommandClass:
                     print(f"Asset ID: {new_id}\n")
                     print("A new asset report has (probably) been sent to the IT printer.")
                     print("Please make sure to give this to Ben.\n")
+                    print("A label should also have been generated.")
+                    print("Please attach this to the device\n")
+                    self.output_to_printer(new_asset, ["New Asset Added", f"Asset Number:  {new_id}"], ["asset_number"])
+                    self.output_asset_tag(new_asset, new_id)
                     input("Press enter to continue.")
                     self.clear_screen()
-                    self.output_to_printer(new_asset, ["New Asset Added", f"Asset Number:  {new_id}"], ["asset_number"])
                     continue
     
     
@@ -407,10 +509,89 @@ class CommandClass:
                 if key not in exclude_list:
                     file.write(f"{key.capitalize()}:  {value}\r\n")
         
+        # Another windows print option works if lpr print monitoring is
+        # installed through windows add feature / print services.
+        # lpr -S 90.8.3.14 -P 9100 -o l print_file_2023-11-17_14-05-39_1000.txt
         if os.name == "posix":
             os.system(f"cat {print_file}.txt |netcat -w 1 90.8.3.14 9100")
         else:
             os.startfile(f"{print_file}.txt", "print")
+    
+    
+    def output_asset_tag(self, asset: object, new_asset_id: int = 0):
+        print_complete = False
+        sato_ip_list = [
+            "90.8.69.1",    # SMC Progress
+            "90.4.69.1",    # SMC Division
+            "90.1.69.1",    # SMC Belcrest
+            "90.3.69.1",    # WSB Commerce
+            "90.2.69.1",    # AHC Clary
+            "90.9.69.1",    # AHC Underground
+            "10.14.6.239",  # SPK Sooner
+        ]
+        tag_file = f"asset_tag{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tmp"
+        printer_reference = []
+        
+        with open("template_tag.lbl", "r") as template_file:
+            template = template_file.read()
+        
+        if new_asset_id:
+            asset_id = f"{new_asset_id:06}"
+        else:
+            asset_id = f"{asset.asset_number:06}" if hasattr(asset, "asset_number") else ""
+            
+        if hasattr(asset, "linux_printer_reference") and asset.linux_printer_reference not in ["", None]:
+            printer_reference.append(f"Linux: {asset.linux_printer_reference}")
+        if hasattr(asset, "kiwi_printer_reference") and asset.kiwi_printer_reference not in ["", None]:
+            printer_reference.append(f"Kiwi: {asset.kiwi_printer_reference}")
+        
+        tag_string = template.format(
+            ip_placeholder_A = asset.ip_address if hasattr(asset, "ip_address") and asset.ip_address is not None else "",
+            device_type_placeholder_B = asset.device_type if hasattr(asset, "device_type") and asset.device_type is not None else "",
+            model_placeholder_C = asset.model if hasattr(asset, "model") and asset.model is not None else "",
+            device_name_placeholder_D = asset.device_name if hasattr(asset, "device_name") and asset.device_name is not None else "",
+            serial_placeholder_E = asset.serial if hasattr(asset, "serial") and asset.serial is not None else "",
+            printer_reference_placeholder_J = ", ".join(printer_reference),
+            pearson_placeholder_L = asset.pearson_kelly_id if hasattr(asset, "pearson_kelly_id") and asset.pearson_kelly_id is not None else "",
+            
+            asset_placeholder_1 = asset_id,
+            
+            placeholder_F = "",
+            placeholder_G = "",
+            placeholder_H = "",
+            placeholder_K = "",
+            placeholder_M = "",
+        )
+        
+        with open(tag_file, "w") as temp_tag:
+            temp_tag.write(tag_string)
+        
+        if os.name == "posix":
+            for ip in sato_ip_list:
+                try:
+                    ping_result = subprocess.run(["ping", "-c", "1", ip], check = True, timeout=.5, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    subprocess.run(["netcat", "-w", "1", ip, "9100"], check=True, stdin=open(tag_file, 'r'))
+                    print_complete = True
+                    break
+                except Exception as error:
+                    continue
+        else:
+            for ip in sato_ip_list:
+                try:
+                    ping_result = subprocess.run(["ping", "-n", "1", ip], check = True, timeout=.5, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    printer_result = os.system(f"lpr -S {ip} -P 9100 -o l {tag_file}")
+                    print_complete = True
+                    break
+                except Exception as error:
+                    continue
+                
+        if not print_complete:
+            print("\nAn error was encountered when trying to print label.")
+            print("Please make sure that the label printer is turned on and connected.\n")
+        else:
+            print("Label printed.\n")
+    
+        os.remove(tag_file)
             
     
     def _process_duplicates_migrations(self, asset_object: object):
@@ -464,7 +645,7 @@ class CommandClass:
             
             # If there are duplicates from the new table, mark any from the
             #   old table to be marked as migrated and removed from options
-            #   to keep.    
+            #   to keep.
             for asset in search_duplicates:
                 if migrated:
                     if asset.table == "IT_Assets":
@@ -1195,7 +1376,7 @@ class CommandClass:
 
 if __name__ == "__main__":
     logger.remove(0)
-    logger.add("debug.log", format="{time:MMMM D, YYYY > HH:mm:ss} | {level} | {message} | {extra}")
+    logger.add("asset_debug.log", format = "{time:MMMM D, YYYY > HH:mm:ss} | {level} | {message} | {extra}", delay = True, rotation = "1 week", retention = "1 month")
     logger = logger.bind(session_id = os.getpid())
     with logger.contextualize(width = os.get_terminal_size().columns):
         logger.info("-----Starting session.-----")
